@@ -1,0 +1,865 @@
+#!/usr/bin/env python3
+"""
+Taskrail — JSON progressive-disclosure agent workflow runner.
+
+Single-file, zero-dependency Python CLI. Ships in any agent ecosystem
+that has Python 3.8+. Agents shell out to this script to fetch the
+next task, advance through a workflow, or resume after interruption.
+
+## Quick start
+
+    # List available taskrails
+    taskrail list
+
+    # Inspect one
+    taskrail info sysadmin-health-check
+
+    # Run through a named taskrail
+    taskrail start --name sysadmin-health-check
+    # (agent completes task 1, validates, then:)
+    taskrail next
+    # ... repeat until "All tasks complete"
+
+    # Resume after a crash (fingerprint-matched)
+    taskrail resume --name sysadmin-health-check
+
+    # Self taskrail (per-agent)
+    taskrail start --self --self-path ./agents/my-agent/.pi/taskrail.json
+
+## Multi-agent safety
+
+State files are timestamped and carry an environmental fingerprint
+(cwd, hostname, env-hash, syslog birth-certificate).  On resume,
+the CLI scores all candidate state files against the current
+environment and picks the best match automatically.
+
+If multiple agents run from the same directory and the matcher
+can't disambiguate, it lists candidates and the agent picks one
+with `--session <n>`.
+
+## File locations (auto-detected or explicit)
+
+    Named taskrails:   <repo>/agents/_skills/taskrail/taskrails/*.taskrail.json
+    Self taskrails:    agents/<agent>/.pi/taskrail.json
+    State files:       <manifest>_state.<timestamp>.json  (alongside manifest)
+    Active rail:       ~/.taskrail/active.json  (so 'next' works across calls)
+"""
+
+import argparse
+import hashlib
+import json
+import os
+import socket
+import sys
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+# ── Constants ───────────────────────────────────────────────────────────────
+
+ACTIVE_RAIL_FILE = Path.home() / ".taskrail" / "active.json"
+STATE_FILE_GLOB = "_state.*.json"        # new-style timestamped
+LEGACY_STATE_SUFFIX = "_state.json"      # pre-fingerprint migration
+
+# ── Auto-detection ──────────────────────────────────────────────────────────
+
+def _find_repo_root(start: Path) -> Optional[Path]:
+    """Walk up from start looking for a repo root (package.json or .git)."""
+    for _ in range(6):
+        if (start / "package.json").exists() or (start / ".git").exists():
+            return start
+        parent = start.parent
+        if parent == start:
+            break
+        start = parent
+    return None
+
+def _detect_taskrails_dir() -> Optional[Path]:
+    """Try to find the named taskrails directory from CWD."""
+    root = _find_repo_root(Path.cwd())
+    if root:
+        # TAO convention: taskrails/ at repo root
+        candidate = root / "taskrails"
+        if candidate.is_dir():
+            return candidate
+        # DAD legacy: agents/_skills/taskrail/taskrails/
+        candidate = root / "agents" / "_skills" / "taskrail" / "taskrails"
+        if candidate.is_dir():
+            return candidate
+    return None
+
+# ── I/O helpers ─────────────────────────────────────────────────────────────
+
+def _read_json(path: Path) -> Optional[Dict[str, Any]]:
+    try:
+        if path.exists():
+            return json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        pass
+    return None
+
+def _write_json(path: Path, data: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n")
+
+# ── Fingerprinting ──────────────────────────────────────────────────────────
+
+def _capture_fingerprint() -> Dict[str, Any]:
+    """Collect non-secret environmental markers for session disambiguation."""
+
+    # Stable env vars (safe — no tokens or secrets)
+    env_parts = []
+    for key in sorted(["EDITOR", "VISUAL", "SHELL", "TERM", "LANG", "HOME"]):
+        val = os.environ.get(key, "")
+        if val:
+            env_parts.append(f"{key}={val}")
+    env_hash = hashlib.sha256("|".join(env_parts).encode()).hexdigest()[:12] if env_parts else ""
+
+    # Machine birth certificate: hash last 1KB of syslog (or nearest equivalent).
+    # Not used for matching (logs change), but proves the session was born on
+    # this machine at a specific moment.  Useful for debugging.
+    syslog_hash = ""
+    for candidate in ["/var/log/syslog", "/var/log/messages", "/var/log/system.log"]:
+        try:
+            with open(candidate, "rb") as fh:
+                fh.seek(0, os.SEEK_END)
+                size = fh.tell()
+                fh.seek(max(0, size - 1024))
+                syslog_hash = hashlib.sha256(fh.read()).hexdigest()[:12]
+            break
+        except (OSError, PermissionError):
+            continue
+
+    return {
+        "cwd": os.getcwd(),
+        "hostname": socket.gethostname(),
+        "user": os.environ.get("USER", os.environ.get("LOGNAME", "")),
+        "env_hash": env_hash,
+        "syslog_tail_hash": syslog_hash,
+    }
+
+def _score_candidate(state: Dict[str, Any], current_fp: Dict[str, Any]) -> int:
+    """Score a candidate state file against the current environment.  Higher = better match."""
+    fp = state.get("fingerprint", {})
+    score = 0
+    # Most discriminating
+    if fp.get("cwd") == current_fp.get("cwd"):
+        score += 3
+    if fp.get("env_hash") and fp.get("env_hash") == current_fp.get("env_hash"):
+        score += 3
+    # Less discriminating but still useful
+    if fp.get("hostname") == current_fp.get("hostname"):
+        score += 1
+    if fp.get("user") == current_fp.get("user"):
+        score += 1
+    return score
+
+# ── State-file path helpers ─────────────────────────────────────────────────
+
+def _new_state_path(manifest_path: Path) -> Path:
+    """Generate a timestamped state-file path for a new session."""
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
+    base = manifest_path.name
+    if base.endswith(".taskrail.json"):
+        stem = base[: -len(".taskrail.json")]
+    elif base.endswith(".json"):
+        stem = base[: -len(".json")]
+    else:
+        stem = base
+    return manifest_path.with_name(f"{stem}_state.{ts}.json")
+
+def _find_state_files(manifest_path: Path) -> List[Path]:
+    """Return all state files for a manifest (timestamped + legacy), newest first."""
+    parent = manifest_path.parent
+    base = manifest_path.name
+
+    if base.endswith(".taskrail.json"):
+        prefix = base[: -len(".taskrail.json")]
+    elif base.endswith(".json"):
+        prefix = base[: -len(".json")]
+    else:
+        prefix = base
+
+    candidates: List[Path] = []
+    glob_pattern = f"{prefix}_state.*.json"
+    try:
+        candidates.extend(sorted(parent.glob(glob_pattern), reverse=True))
+    except OSError:
+        pass
+
+    # Legacy: single _state.json without timestamp
+    legacy = parent / f"{prefix}_state.json"
+    if legacy.exists():
+        candidates.append(legacy)
+
+    return candidates
+
+# ── Manifest / state helpers ────────────────────────────────────────────────
+
+def _load_manifest(path: Path) -> Optional[Dict[str, Any]]:
+    m = _read_json(path)
+    if not m or "rail" not in m:
+        return None
+    return m
+
+def _load_state(path: Path) -> Optional[Dict[str, Any]]:
+    return _read_json(path)
+
+def _init_state(manifest: Dict[str, Any]) -> Dict[str, Any]:
+    now = datetime.now(timezone.utc).isoformat()
+    return {
+        "session_id": uuid.uuid4().hex[:8],
+        "created_at": now,
+        "total_task_count": len(manifest["rail"]),
+        "completed_tasks": [],
+        "current_task": 0,
+        "started": now,
+        "last_updated": now,
+        "rail_title": manifest.get("title", "Untitled"),
+        "fingerprint": _capture_fingerprint(),
+    }
+
+def _save_state(path: Path, state: Dict[str, Any]) -> None:
+    state["last_updated"] = datetime.now(timezone.utc).isoformat()
+    _write_json(path, state)
+
+def _get_task(manifest: Dict[str, Any], task_id: int) -> Optional[Dict[str, Any]]:
+    for t in manifest["rail"]:
+        if t.get("task_id") == task_id:
+            return t
+    return None
+
+def _format_task(task: Dict[str, Any], state: Dict[str, Any]) -> str:
+    constraints = "\n".join(f"  {c}" for c in task.get("constraints", []))
+    progress = f"Task {task['task_id']} of {state['total_task_count']}"
+    lines = [
+        f"## 🛤️ Taskrail: {state.get('rail_title', 'Untitled')}",
+        "",
+        f"### {progress}: {task.get('task_name', 'unknown')}",
+        "",
+        "**Constraints:**",
+        constraints,
+        "",
+        "**Validation:**",
+        f"  {task.get('validation', '(none specified)')}",
+        "",
+        "> Once complete and validated, call `taskrail next` to advance.",
+    ]
+    return "\n".join(lines)
+
+# ── Active rail tracking ────────────────────────────────────────────────────
+
+def _read_active() -> Optional[Dict[str, Any]]:
+    return _read_json(ACTIVE_RAIL_FILE)
+
+def _write_active(entry: Dict[str, Any]) -> None:
+    _write_json(ACTIVE_RAIL_FILE, entry)
+
+def _clear_active() -> None:
+    try:
+        ACTIVE_RAIL_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+# ── Named taskrail helpers ──────────────────────────────────────────────────
+
+def _list_available(taskrails_dir: Path) -> List[str]:
+    try:
+        return sorted(
+            f.name.replace(".taskrail.json", "")
+            for f in taskrails_dir.iterdir()
+            if f.name.endswith(".taskrail.json")
+        )
+    except OSError:
+        return []
+
+# ── Session resolution for resume ───────────────────────────────────────────
+
+def _resolve_session(manifest_path: Path, explicit_session: Optional[int] = None
+                     ) -> Tuple[Optional[Path], Optional[Dict[str, Any]], str]:
+    """
+    Find the right state file to resume.
+
+    Returns (state_path, state, message).
+    state_path is None if no suitable session found; message explains why.
+    """
+    candidates = _find_state_files(manifest_path)
+
+    if not candidates:
+        return None, None, "No state files found. Use `taskrail start` to begin."
+
+    # Single candidate — use it (legacy or sole session)
+    if len(candidates) == 1:
+        state = _load_state(candidates[0])
+        if not state:
+            return None, None, "State file exists but is unreadable."
+        return candidates[0], state, ""
+
+    # Multiple candidates — explicit choice
+    if explicit_session is not None:
+        if 1 <= explicit_session <= len(candidates):
+            chosen = candidates[explicit_session - 1]
+            state = _load_state(chosen)
+            if not state:
+                return None, None, f"Session {explicit_session} is unreadable."
+            return chosen, state, ""
+        else:
+            return None, None, f"--session must be between 1 and {len(candidates)}."
+
+    # Multiple candidates — fingerprint scoring
+    current_fp = _capture_fingerprint()
+    scored = []
+    for sp in candidates:
+        st = _load_state(sp)
+        if not st:
+            continue
+        s = _score_candidate(st, current_fp)
+        scored.append((s, sp, st))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    if not scored:
+        return None, None, "No readable state files found."
+
+    best_score, best_path, best_state = scored[0]
+
+    # Check for ties at the top
+    tied = [item for item in scored if item[0] == best_score]
+    if len(tied) > 1:
+        # Ambiguous — list all candidates
+        lines = [
+            f'⚠️  Found {len(candidates)} sessions for this taskrail. '
+            f"Could not determine which is yours:\n",
+        ]
+        for i, (score, sp, st) in enumerate(scored, 1):
+            fp = st.get("fingerprint", {})
+            created = st.get("created_at", "?")
+            cwd = fp.get("cwd", "?")
+            done = len(st.get("completed_tasks", []))
+            total = st.get("total_task_count", "?")
+            lines.append(
+                f"  {i}. {created}  cwd: {cwd}  "
+                f"progress: {done}/{total}  score: {score}"
+            )
+        lines.append(f"\nRe-run with `--session <n>` to pick one, "
+                      f"or start fresh with `taskrail start`.")
+        return None, None, "\n".join(lines)
+
+    # Clear winner
+    return best_path, best_state, ""
+
+# ── Subcommands ─────────────────────────────────────────────────────────────
+
+def cmd_list(args: argparse.Namespace) -> int:
+    taskrails_dir = args.taskrails_dir or _detect_taskrails_dir()
+    if not taskrails_dir or not taskrails_dir.is_dir():
+        print("❌ Could not find taskrails directory. Use --taskrails-dir.")
+        return 1
+
+    available = _list_available(taskrails_dir)
+    if not available:
+        print("(no named taskrails found)")
+        return 0
+
+    print("## 🛤️ Available Taskrails\n")
+    for name in available:
+        manifest = _load_manifest(taskrails_dir / f"{name}.taskrail.json")
+        if manifest:
+            print(f"- **{name}** — {manifest.get('title', '?')} ({len(manifest['rail'])} tasks)")
+        else:
+            print(f"- **{name}** (unreadable)")
+    print("\nUse `taskrail start --name <name>` to begin.")
+    return 0
+
+
+def cmd_info(args: argparse.Namespace) -> int:
+    taskrails_dir = args.taskrails_dir or _detect_taskrails_dir()
+    if not taskrails_dir:
+        print("❌ Could not find taskrails directory. Use --taskrails-dir.")
+        return 1
+
+    manifest_path = taskrails_dir / f"{args.name}.taskrail.json"
+    manifest = _load_manifest(manifest_path)
+    if not manifest:
+        available = _list_available(taskrails_dir)
+        print(f'❌ No taskrail found named "{args.name}".')
+        print(f"Available: {', '.join(available) or '(none)'}")
+        return 1
+
+    print(f"## 🛤️ {manifest.get('title', args.name)}")
+    print(f"\n{manifest.get('description', '(no description)')}")
+    print(f"\n**Tasks ({len(manifest['rail'])}):**")
+    for t in manifest["rail"]:
+        print(f"  {t.get('task_id', '?')}. `{t.get('task_name', '?')}`")
+    print(f"\n> Use `taskrail start --name {args.name}` to begin.")
+    return 0
+
+
+def cmd_start(args: argparse.Namespace) -> int:
+    if args.self:
+        return _start_self(args)
+    return _start_named(args)
+
+
+def _start_named(args: argparse.Namespace) -> int:
+    taskrails_dir = args.taskrails_dir or _detect_taskrails_dir()
+    if not taskrails_dir:
+        print("❌ Could not find taskrails directory. Use --taskrails-dir.")
+        return 1
+
+    manifest_path = taskrails_dir / f"{args.name}.taskrail.json"
+    manifest = _load_manifest(manifest_path)
+    if not manifest:
+        available = _list_available(taskrails_dir)
+        print(f'❌ No taskrail found named "{args.name}".')
+        print(f"Available: {', '.join(available) or '(none)'}")
+        return 1
+
+    # Check for existing sessions — warn but allow new
+    existing = _find_state_files(manifest_path)
+    if existing:
+        # Check if any are incomplete
+        incomplete = []
+        for sp in existing:
+            st = _load_state(sp)
+            if st and st.get("completed_tasks"):
+                done = len(st.get("completed_tasks", []))
+                total = st.get("total_task_count", 0)
+                if done < total:
+                    incomplete.append((sp, st))
+        if incomplete:
+            lines = [f'⚠️  Taskrail "{args.name}" has {len(incomplete)} incomplete session(s):\n']
+            for sp, st in incomplete[:5]:
+                fp = st.get("fingerprint", {})
+                lines.append(
+                    f"   • {st.get('created_at', '?')}  "
+                    f"cwd: {fp.get('cwd', '?')}  "
+                    f"progress: {len(st.get('completed_tasks', []))}/{st.get('total_task_count', '?')}"
+                )
+            lines.append(f"\nUse `taskrail resume --name {args.name}` to continue one, "
+                          f"or proceed to start a fresh session.")
+            print("\n".join(lines))
+
+    # Initialize fresh session
+    state = _init_state(manifest)
+    state["current_task"] = 1
+    first_task = _get_task(manifest, 1)
+    if not first_task:
+        print("❌ Taskrail has no tasks.")
+        return 1
+
+    state_path = _new_state_path(manifest_path)
+    _save_state(state_path, state)
+    _write_active({
+        "type": "named",
+        "name": args.name,
+        "manifest_path": str(manifest_path),
+        "state_path": str(state_path),
+    })
+
+    print(f'🚂 **{manifest.get("title", args.name)}** — Started')
+    print(f"   session: {state['session_id']}  ({state_path.name})\n")
+    print(_format_task(first_task, state))
+    return 0
+
+
+def _start_self(args: argparse.Namespace) -> int:
+    self_path = Path(args.self_path) if args.self_path else None
+    if not self_path or not self_path.exists():
+        print(f"❌ No self taskrail found at {self_path or '(no path given)'}.")
+        print("Use --self-path to specify the taskrail.json location.")
+        return 1
+
+    manifest = _load_manifest(self_path)
+    if not manifest:
+        print(f"❌ Could not read or parse {self_path}")
+        return 1
+
+    existing = _find_state_files(self_path)
+    if existing:
+        incomplete = []
+        for sp in existing:
+            st = _load_state(sp)
+            if st and st.get("completed_tasks"):
+                done = len(st.get("completed_tasks", []))
+                total = st.get("total_task_count", 0)
+                if done < total:
+                    incomplete.append((sp, st))
+        if incomplete:
+            lines = ["⚠️  Self taskrail has incomplete session(s):\n"]
+            for sp, st in incomplete[:5]:
+                fp = st.get("fingerprint", {})
+                lines.append(
+                    f"   • {st.get('created_at', '?')}  "
+                    f"cwd: {fp.get('cwd', '?')}  "
+                    f"progress: {len(st.get('completed_tasks', []))}/{st.get('total_task_count', '?')}"
+                )
+            lines.append("\nUse `taskrail resume --self --self-path ...` to continue, "
+                          "or proceed to start fresh.")
+            print("\n".join(lines))
+
+    state = _init_state(manifest)
+    state["current_task"] = 1
+    first_task = _get_task(manifest, 1)
+    if not first_task:
+        print("❌ Taskrail has no tasks.")
+        return 1
+
+    state_path = _new_state_path(self_path)
+    _save_state(state_path, state)
+    _write_active({
+        "type": "self",
+        "name": "self",
+        "manifest_path": str(self_path),
+        "state_path": str(state_path),
+    })
+
+    print(f'🚂 **{manifest.get("title", "self")}** — Started (self)')
+    print(f"   session: {state['session_id']}  ({state_path.name})\n")
+    print(_format_task(first_task, state))
+    return 0
+
+
+def cmd_resume(args: argparse.Namespace) -> int:
+    if args.self:
+        return _resume_self(args)
+    return _resume_named(args)
+
+
+def _resume_named(args: argparse.Namespace) -> int:
+    taskrails_dir = args.taskrails_dir or _detect_taskrails_dir()
+    if not taskrails_dir:
+        print("❌ Could not find taskrails directory. Use --taskrails-dir.")
+        return 1
+
+    manifest_path = taskrails_dir / f"{args.name}.taskrail.json"
+    manifest = _load_manifest(manifest_path)
+    if not manifest:
+        print(f'❌ No taskrail found named "{args.name}".')
+        return 1
+
+    state_path, state, msg = _resolve_session(manifest_path, args.session)
+    if msg:
+        print(msg)
+        return 1 if state_path is None else 0
+
+    if state is None:
+        print(f'No session found for "{args.name}". Use `taskrail start --name {args.name}` to begin.')
+        return 1
+
+    completed = state.get("completed_tasks", [])
+    next_id = max(completed) + 1 if completed else 1
+
+    if next_id > state["total_task_count"]:
+        print(f'✅ Taskrail "{args.name}" is complete! All {state["total_task_count"]} tasks done.')
+        _clear_active()
+        return 0
+
+    task = _get_task(manifest, next_id)
+    if not task:
+        print(f"⚠️  Task {next_id} not found in manifest (corrupted rail?).")
+        return 1
+
+    state["current_task"] = next_id
+    _save_state(state_path, state)
+    _write_active({
+        "type": "named",
+        "name": args.name,
+        "manifest_path": str(manifest_path),
+        "state_path": str(state_path),
+    })
+
+    fp = state.get("fingerprint", {})
+    print(f'🚂 **{manifest.get("title", args.name)}** — Resumed')
+    print(f"   session: {state.get('session_id', '?')}  "
+          f"created: {state.get('created_at', '?')}  "
+          f"cwd: {fp.get('cwd', '?')}\n")
+    print(f"(Completed: {len(completed)} of {state['total_task_count']})\n")
+    print(_format_task(task, state))
+    return 0
+
+
+def _resume_self(args: argparse.Namespace) -> int:
+    self_path = Path(args.self_path) if args.self_path else None
+    if not self_path or not self_path.exists():
+        print(f"❌ No self taskrail found at {self_path or '(no path given)'}.")
+        return 1
+
+    manifest = _load_manifest(self_path)
+    if not manifest:
+        print(f"❌ Could not read or parse {self_path}")
+        return 1
+
+    state_path, state, msg = _resolve_session(self_path, args.session)
+    if msg:
+        print(msg)
+        return 1 if state_path is None else 0
+
+    if state is None:
+        print(f"No session found for self taskrail. Use `taskrail start --self --self-path {self_path}` to begin.")
+        return 1
+
+    completed = state.get("completed_tasks", [])
+    next_id = max(completed) + 1 if completed else 1
+
+    if next_id > state["total_task_count"]:
+        print(f'✅ Self taskrail "{manifest.get("title", "self")}" is complete! All {state["total_task_count"]} tasks done.')
+        _clear_active()
+        return 0
+
+    task = _get_task(manifest, next_id)
+    if not task:
+        print(f"⚠️  Task {next_id} not found in self taskrail (corrupted?).")
+        return 1
+
+    state["current_task"] = next_id
+    _save_state(state_path, state)
+    _write_active({
+        "type": "self",
+        "name": "self",
+        "manifest_path": str(self_path),
+        "state_path": str(state_path),
+    })
+
+    fp = state.get("fingerprint", {})
+    print(f'🚂 **{manifest.get("title", "self")}** — Resumed (self)')
+    print(f"   session: {state.get('session_id', '?')}  "
+          f"created: {state.get('created_at', '?')}\n")
+    print(f"(Completed: {len(completed)} of {state['total_task_count']})\n")
+    print(_format_task(task, state))
+    return 0
+
+
+def cmd_next(args: argparse.Namespace) -> int:
+    """Advance to the next task in the currently active taskrail."""
+    active = _read_active()
+    if not active:
+        print("⚠️  No active taskrail. Start one first with `taskrail start` or `taskrail resume`.")
+        return 1
+
+    # Use the state_path from the active file (exact path, no resolution needed)
+    state_path_str = active.get("state_path")
+    if not state_path_str:
+        # Fallback for old active files: try legacy path
+        manifest_path = Path(active["manifest_path"])
+        state_path = manifest_path.with_name(
+            manifest_path.name.replace(".json", "_state.json")
+        )
+    else:
+        state_path = Path(state_path_str)
+
+    manifest_path = Path(active["manifest_path"])
+    manifest = _load_manifest(manifest_path)
+    if not manifest:
+        print("❌ Active taskrail manifest is missing or unreadable.")
+        _clear_active()
+        return 1
+
+    state = _load_state(state_path)
+    if not state:
+        print("❌ State file is missing. Restart with `taskrail resume`.")
+        _clear_active()
+        return 1
+
+    current_id = state.get("current_task", 0)
+    completed = state.get("completed_tasks", [])
+
+    # Mark current task as complete
+    if current_id > 0 and current_id not in completed:
+        completed.append(current_id)
+        completed.sort()
+        state["completed_tasks"] = completed
+
+    next_id = max(completed) + 1 if completed else 1
+
+    if next_id > state["total_task_count"]:
+        state["current_task"] = state["total_task_count"]
+        _save_state(state_path, state)
+        _clear_active()
+
+        lines = [
+            "🎉 **Taskrail Complete!**",
+            "",
+            f'"{manifest.get("title", "Untitled")}" — all {state["total_task_count"]} tasks completed.',
+            "",
+            f"Completed tasks: {', '.join(str(t) for t in completed)}",
+            "",
+            "> The state file has been saved. No further tasks remain.",
+        ]
+        print("\n".join(lines))
+        return 0
+
+    task = _get_task(manifest, next_id)
+    if not task:
+        print(f"⚠️  Task {next_id} not found in manifest (corrupted rail?).")
+        print(f"Completed: {', '.join(str(t) for t in completed)}")
+        return 1
+
+    state["current_task"] = next_id
+    _save_state(state_path, state)
+
+    print(f"✅ Task {current_id} completed.\n")
+    print(f"Progress: {len(completed)}/{state['total_task_count']}\n")
+    print(_format_task(task, state))
+    return 0
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    """Show current active taskrail state."""
+    active = _read_active()
+    if not active:
+        print("No active taskrail.")
+        return 0
+
+    manifest_path = Path(active["manifest_path"])
+    manifest = _load_manifest(manifest_path)
+
+    state_path_str = active.get("state_path")
+    if state_path_str:
+        state_path = Path(state_path_str)
+        state = _load_state(state_path)
+    else:
+        # Legacy fallback
+        state_path = manifest_path.with_name(
+            manifest_path.name.replace(".json", "_state.json")
+        )
+        state = _load_state(state_path)
+
+    print("## 🛤️ Active Taskrail\n")
+    print(f"Name:       {active.get('name', '?')} ({active.get('type', '?')})")
+    if manifest:
+        print(f"Title:      {manifest.get('title', '?')}")
+    if state:
+        print(f"Session:    {state.get('session_id', '?')}")
+        print(f"Progress:   {len(state.get('completed_tasks', []))}/{state.get('total_task_count', '?')}")
+        print(f"Current:    task {state.get('current_task', '?')}")
+        print(f"Created:    {state.get('created_at', '?')}")
+        print(f"Updated:    {state.get('last_updated', '?')}")
+        fp = state.get("fingerprint", {})
+        if fp:
+            print(f"CWD:        {fp.get('cwd', '?')}")
+    print(f"\nManifest:   {manifest_path}")
+    print(f"State:      {state_path}")
+    return 0
+
+
+def cmd_sessions(args: argparse.Namespace) -> int:
+    """List all sessions for a named taskrail."""
+    taskrails_dir = args.taskrails_dir or _detect_taskrails_dir()
+    if not taskrails_dir:
+        print("❌ Could not find taskrails directory. Use --taskrails-dir.")
+        return 1
+
+    manifest_path = taskrails_dir / f"{args.name}.taskrail.json"
+    if not manifest_path.exists():
+        print(f'❌ No taskrail found named "{args.name}".')
+        return 1
+
+    candidates = _find_state_files(manifest_path)
+    if not candidates:
+        print(f'No sessions found for "{args.name}".')
+        return 0
+
+    current_fp = _capture_fingerprint()
+    print(f"## 🛤️ Sessions: {args.name}\n")
+    for i, sp in enumerate(candidates, 1):
+        st = _load_state(sp)
+        if not st:
+            print(f"  {i}. {sp.name}  (unreadable)")
+            continue
+        fp = st.get("fingerprint", {})
+        score = _score_candidate(st, current_fp)
+        done = len(st.get("completed_tasks", []))
+        total = st.get("total_task_count", "?")
+        marker = " ← best match" if i == 1 else ""
+        print(f"  {i}. {st.get('created_at', '?')}  "
+              f"session: {st.get('session_id', '?')}  "
+              f"progress: {done}/{total}  "
+              f"cwd: {fp.get('cwd', '?')}  "
+              f"score: {score}{marker}")
+    return 0
+
+
+# ── CLI setup ───────────────────────────────────────────────────────────────
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Taskrail — JSON progressive-disclosure agent workflow runner.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  taskrail list
+  taskrail info sysadmin-health-check
+  taskrail start --name sysadmin-health-check
+  taskrail next
+  taskrail resume --name sysadmin-health-check
+  taskrail sessions sysadmin-health-check
+  taskrail start --self --self-path ./agents/my-agent/.pi/taskrail.json
+  taskrail status
+        """,
+    )
+
+    sub = parser.add_subparsers(dest="command", help="Subcommand")
+
+    # list
+    p_list = sub.add_parser("list", help="List available named taskrails")
+    p_list.add_argument("--taskrails-dir", type=Path, help="Path to taskrails directory")
+
+    # info
+    p_info = sub.add_parser("info", help="Show details about a taskrail")
+    p_info.add_argument("name", help="Taskrail name (without .taskrail.json)")
+    p_info.add_argument("--taskrails-dir", type=Path, help="Path to taskrails directory")
+
+    # start
+    p_start = sub.add_parser("start", help="Start a taskrail")
+    p_start.add_argument("--name", help="Named taskrail to start")
+    p_start.add_argument("--self", action="store_true", help="Start self taskrail")
+    p_start.add_argument("--taskrails-dir", type=Path, help="Path to named taskrails directory")
+    p_start.add_argument("--self-path", help="Path to self taskrail manifest")
+
+    # resume
+    p_resume = sub.add_parser("resume", help="Resume a taskrail from last completed task")
+    p_resume.add_argument("--name", help="Named taskrail to resume")
+    p_resume.add_argument("--self", action="store_true", help="Resume self taskrail")
+    p_resume.add_argument("--taskrails-dir", type=Path, help="Path to named taskrails directory")
+    p_resume.add_argument("--self-path", help="Path to self taskrail manifest")
+    p_resume.add_argument("--session", type=int, help="Explicit session number to resume (from `taskrail sessions`)")
+
+    # next
+    p_next = sub.add_parser("next", help="Advance to next task in active taskrail")
+
+    # status
+    p_status = sub.add_parser("status", help="Show active taskrail state")
+
+    # sessions
+    p_sessions = sub.add_parser("sessions", help="List all sessions for a named taskrail")
+    p_sessions.add_argument("name", help="Taskrail name (without .taskrail.json)")
+    p_sessions.add_argument("--taskrails-dir", type=Path, help="Path to taskrails directory")
+
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        return 0
+
+    dispatch = {
+        "list": cmd_list,
+        "info": cmd_info,
+        "start": cmd_start,
+        "resume": cmd_resume,
+        "next": cmd_next,
+        "status": cmd_status,
+        "sessions": cmd_sessions,
+    }
+
+    fn = dispatch.get(args.command)
+    if fn:
+        return fn(args)
+
+    parser.print_help()
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

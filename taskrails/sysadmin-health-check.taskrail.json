@@ -1,0 +1,68 @@
+{
+  "title": "Sysadmin Health Check",
+  "description": "Routine system health check for the domestic-automation-daemon infrastructure. Verifies that core services are running, logs are healthy, and disk space is adequate.",
+  "rail": [
+    {
+      "task_id": 1,
+      "task_name": "check_caddy_status",
+      "constraints": [
+        "- You MUST run `sudo systemctl status caddy --no-pager -n 5`",
+        "- You MUST verify that the service state is 'active (running)'",
+        "- You SHOULD check the last few journal lines for errors"
+      ],
+      "validation": "Report the caddy service status (active/inactive/failed) and any errors found in recent journal output."
+    },
+    {
+      "task_id": 2,
+      "task_name": "check_disk_space",
+      "constraints": [
+        "- You MUST run `df -h /` and `df -h /home`",
+        "- You MUST verify that no partition is above 85% usage",
+        "- You SHOULD check /tmp for large stale files"
+      ],
+      "validation": "Report disk usage percentages for / and /home, and flag any partitions above 85%."
+    },
+    {
+      "task_id": 3,
+      "task_name": "check_cron_health",
+      "constraints": [
+        "- You MUST run `crontab -l` to verify the cron configuration is intact",
+        "- You MUST check `tail -20 agents/home-agent/logs/agent_cron.log` for recent activity",
+        "- You MUST verify at least one cron-triggered agent run has occurred in the last 60 minutes"
+      ],
+      "validation": "Report whether cron is configured, when the last agent run occurred, and whether any errors appear in the cron log."
+    },
+    {
+      "task_id": 4,
+      "task_name": "check_heartbeat_scheduler",
+      "constraints": [
+        "- You MUST check `tail -20 agents/home-agent/logs/heartbeat_cron.log` for recent activity",
+        "- You MUST verify the heartbeat schedule file exists at `bin/heartbeat-scheduler/heartbeat_scheduler.json`",
+        "- You SHOULD list today's scheduled heartbeat tasks and check if they fired"
+      ],
+      "validation": "Report whether the heartbeat scheduler is running, the last few executed tasks, and any missed schedules."
+    },
+    {
+      "task_id": 5,
+      "task_name": "check_memory_and_load",
+      "constraints": [
+        "- You MUST run `free -h` to check memory usage",
+        "- You MUST run `uptime` to check system load",
+        "- You MUST verify swap usage is below 50%",
+        "- You SHOULD check for zombie processes with `ps aux | grep -c defunct`"
+      ],
+      "validation": "Report system load averages, memory usage (used/total), swap usage, and zombie process count."
+    },
+    {
+      "task_id": 6,
+      "task_name": "summarize_and_report",
+      "constraints": [
+        "- You MUST compile the findings from all previous tasks into a concise summary",
+        "- You MUST flag any issues that need human attention",
+        "- You SHOULD suggest fixes for any problems found",
+        "- You MAY create a Todoist task on the LLM-Agent board for any issues requiring follow-up"
+      ],
+      "validation": "Provide a final summary of system health with 'All Clear' or a list of issues requiring attention."
+    }
+  ]
+}
