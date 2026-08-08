@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Local adaptation layer (generated per-user during induction)
+local/
+
+# Secrets and environment
+.env
+*.pem
+*.key
+credentials.*
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Taskrail state files (runtime, not source)
+*_state.*.json
