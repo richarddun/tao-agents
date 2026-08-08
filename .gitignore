@@ -27,5 +27,9 @@ __pycache__/
 .venv/
 venv/
 
+# Agent runtime
+backups/
+*.log
+
 # Taskrail state files (runtime, not source)
 *_state.*.json

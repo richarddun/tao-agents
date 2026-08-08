@@ -1,0 +1,4 @@
+# Generated during induction — do not commit
+local/
+backups/
+*.log

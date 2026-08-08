@@ -1,0 +1,90 @@
+{
+  "title": "Privacy Champion — Induction & Onboarding",
+  "description": "One-time induction workflow that adapts the Privacy Champion to the user's environment. Detects platform, verifies tools, explains the approval model, runs a dry-run fingerprint, and generates the local adaptation layer. Must complete before the audit taskrail can run.",
+  "rail": [
+    {
+      "task_id": 1,
+      "task_name": "verify_platform",
+      "constraints": [
+        "- You MUST run scripts/fingerprint.sh to detect the operating system and browsers",
+        "- You MUST verify the detected OS family is in the supported list: windows, macos, or linux",
+        "- You MUST NOT proceed with induction if the OS is entirely unsupported (ChromeOS, iOS, Android) — explain why and suggest alternatives",
+        "- You MUST note any detected browsers not in the surface catalog as 'limited support'"
+      ],
+      "validation": "Report the detected platform, OS version, list of browsers, and confirm compatibility with the privacy-champion package. If unsupported, stop here and explain what is supported."
+    },
+    {
+      "task_id": 2,
+      "task_name": "check_dependencies",
+      "constraints": [
+        "- You MUST verify the following tools are available: bash, curl or wget, jq",
+        "- You MUST check if python3 or python is available (preferred but not required for v0.1)",
+        "- You SHOULD suggest installation commands for missing tools using the detected package manager",
+        "- You MUST flag missing tools that will degrade the audit (jq, curl/wget)",
+        "- You MUST NOT install anything without user confirmation"
+      ],
+      "validation": "Report which required tools are available, which are missing, and provide copy-paste installation commands for the detected package manager. Wait for user to install missing tools before proceeding."
+    },
+    {
+      "task_id": 3,
+      "task_name": "explain_approval_model",
+      "constraints": [
+        "- You MUST explain the tier system: T1 (clear win, no impact), T2 (win, minor impact), T3 (win, moderate impact — review individually), T4 (marginal/major impact — skip)",
+        "- You MUST explain that NO changes are applied without explicit approval — the agent proposes, the user decides",
+        "- You MUST explain the difference between read-only operations (automatic) and mutations (require approval)",
+        "- You MUST explain that admin/root access enables more closures but is not required for the audit to run",
+        "- You SHOULD ask if the user wants to adjust the tier defaults (e.g., 'auto-apply T1 only' vs 'auto-apply T1+T2')"
+      ],
+      "validation": "Confirm the user understands the approval model. Record their tier preference (default or custom). Do NOT proceed until the user acknowledges understanding."
+    },
+    {
+      "task_id": 4,
+      "task_name": "run_dry_run_fingerprint",
+      "constraints": [
+        "- You MUST run the full fingerprint script and capture the output",
+        "- You MUST verify the output is valid JSON and contains all required fields",
+        "- You MUST NOT save the fingerprint to any external location — it stays in the workspace",
+        "- You SHOULD compare the detected browsers against the surface catalog and report coverage",
+        "- You MUST flag any anomalies: OS version newer than catalog, unusual package manager, no browsers detected"
+      ],
+      "validation": "Report the fingerprint summary. Confirm the surface catalog covers this platform and browser combination. Note any gaps. The fingerprint validates that the induction environment matches the actual audit environment."
+    },
+    {
+      "task_id": 5,
+      "task_name": "generate_local_config",
+      "constraints": [
+        "- You MUST create local/environment.yaml with: detected OS, detected browsers, privilege level, tier preferences, workspace path, backup location, report format preference",
+        "- You MUST NOT include any credentials, API keys, or secrets in the config file",
+        "- You MUST NOT modify any files in the curated core (taskrails/, sops/, scripts/, data/, SYSTEM.md, agent.yaml)",
+        "- You SHOULD ask the user for a preferred backup location (default: ./backups/)",
+        "- You SHOULD ask the user for a preferred report format: text, markdown, or json (default: markdown)"
+      ],
+      "validation": "Confirm local/environment.yaml was created. Report its path and contents summary. Confirm no curated core files were modified."
+    },
+    {
+      "task_id": 6,
+      "task_name": "run_readiness_check",
+      "constraints": [
+        "- You MUST verify that all scripts in scripts/ are executable",
+        "- You MUST verify the surface catalog can be parsed as valid JSON",
+        "- You MUST verify the privacy-audit taskrail can be loaded and parsed",
+        "- You MUST verify that the workspace directory exists and is writable",
+        "- You SHOULD run a single probe against one browser surface as a smoke test (read-only, no changes)",
+        "- You MUST report any failures with specific error messages and suggested fixes"
+      ],
+      "validation": "Report readiness status: PASS (all checks green), PARTIAL (some checks failed but audit can proceed with limitations), or FAIL (cannot proceed). If FAIL, provide specific remediation steps."
+    },
+    {
+      "task_id": 7,
+      "task_name": "complete_induction",
+      "constraints": [
+        "- You MUST summarize: platform, browsers found, tools available, tier preference, readiness status",
+        "- You MUST provide the exact command to start the audit: 'Run start_taskrail privacy-audit'",
+        "- You MUST explain that the audit can be re-run at any time, and that re-running after OS/browser updates is recommended",
+        "- You SHOULD suggest a calendar reminder: quarterly privacy audit",
+        "- You MUST NOT start the audit automatically — the user must explicitly invoke it"
+      ],
+      "validation": "Confirm induction is complete. The user is ready to run the privacy audit. The induction taskrail state file should show all 7 tasks complete."
+    }
+  ]
+}

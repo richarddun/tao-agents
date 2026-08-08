@@ -1,0 +1,111 @@
+{
+  "title": "Privacy Audit & Hardening",
+  "description": "Systematic privacy audit of OS, browser, and application telemetry surfaces. Fingerprints the environment, enumerates known exfiltration channels, probes current state, classifies risk, presents for approval, applies closures, verifies, and reports remaining gaps. Non-negotiable sequential flow — skipping or reordering steps compromises the audit.",
+  "rail": [
+    {
+      "task_id": 1,
+      "task_name": "fingerprint_system",
+      "constraints": [
+        "- You MUST run the fingerprint script to detect OS, version, desktop environment, and installed browsers",
+        "- You MUST detect the package manager and available system tools",
+        "- You MUST determine the current user's privilege level (admin/root vs standard)",
+        "- You MUST capture the output as structured JSON — do not summarize or omit fields",
+        "- You MUST NOT probe any telemetry surfaces yet — this step is detection only"
+      ],
+      "validation": "Report the detected OS name, OS version, desktop environment (if any), list of installed browsers with versions, detected package manager, and privilege level. The output must be complete enough to select the correct surface catalog in the next step."
+    },
+    {
+      "task_id": 2,
+      "task_name": "enumerate_surfaces",
+      "constraints": [
+        "- You MUST load the surface catalog for the detected OS from the knowledge base",
+        "- You MUST include OS-level telemetry surfaces (diagnostic data, analytics, usage reporting, error reporting, location services, advertising ID)",
+        "- You MUST enumerate browser-level surfaces for EACH detected browser (telemetry, usage stats, crash reports, search suggestions, spell check, safe browsing, sync, signed-in state)",
+        "- You MUST include common application surfaces known to phone home on this platform",
+        "- You MUST include network-level surfaces (DNS leakage, WebRTC, IPv6 privacy extensions)",
+        "- You MUST produce a flat list with unique surface IDs, human-readable descriptions, and categories",
+        "- You MUST NOT probe state yet — enumeration only"
+      ],
+      "validation": "Report the total count of surfaces enumerated, broken down by category (OS, browser, application, network). List the first 5 and last 5 surface IDs as a sample. Confirm the catalog loaded matches the detected OS."
+    },
+    {
+      "task_id": 3,
+      "task_name": "probe_current_state",
+      "constraints": [
+        "- You MUST probe each enumerated surface to determine its current state",
+        "- You MUST use the probe method specified in the surface catalog for each surface (registry key, config file, API check, service status, preference flag)",
+        "- You MUST classify each surface as: ENABLED, DISABLED, PARTIALLY_ENABLED, or UNKNOWN",
+        "- For UNKNOWN surfaces, you MUST note why the probe failed (permission denied, path not found, unsupported version)",
+        "- You MUST NOT modify anything — read-only probing only",
+        "- You SHOULD batch probes where possible to reduce execution time"
+      ],
+      "validation": "Report: total surfaces probed, count by state (enabled/disabled/partial/unknown), and any surfaces that could not be probed with the reason. Highlight any UNKNOWN results that may indicate missing tools or insufficient permissions."
+    },
+    {
+      "task_id": 4,
+      "task_name": "classify_and_rate",
+      "constraints": [
+        "- You MUST classify each enabled or partially-enabled surface by severity: HIGH (identity-exfiltrating, PII leakage), MEDIUM (usage profiling, behavioral tracking), LOW (crash diagnostics only, minimal data)",
+        "- You MUST assess reversibility for each surface: REVERSIBLE (simple toggle), PARTIALLY_REVERSIBLE (requires config edit, may revert on update), IRREVERSIBLE (requires system-level change with no undo)",
+        "- You MUST estimate user impact: NONE (no noticeable change), MINOR (preference reset), MODERATE (feature loss, e.g., voice assistant), MAJOR (breaks a workflow or application)",
+        "- You MUST group surfaces into recommended action tiers: TIER_1 (clear privacy win, no impact — APPLY), TIER_2 (privacy win, minor impact — RECOMMEND), TIER_3 (privacy win, moderate impact — REVIEW), TIER_4 (marginal win or major impact — SKIP)",
+        "- You MUST NOT apply any changes — classification only"
+      ],
+      "validation": "Report the count of surfaces in each tier (T1-T4) and each severity level (HIGH/MEDIUM/LOW). Provide a sample of one surface from each tier with its classification and rationale. Confirm that no changes have been applied."
+    },
+    {
+      "task_id": 5,
+      "task_name": "present_for_approval",
+      "constraints": [
+        "- You MUST present a clear summary organized by tier: what will be changed, what the impact is, and what the privacy benefit is",
+        "- You MUST highlight any TIER_1 surfaces as strongly recommended with negligible user impact",
+        "- You MUST flag any IRREVERSIBLE changes explicitly with warning language",
+        "- You MUST present tier-level approval options: the user may approve all T1 only, T1+T2, T1+T2+T3, or select individual surfaces",
+        "- You MUST wait for explicit user approval before proceeding — this is a HARD GATE",
+        "- You MUST NOT apply any changes until approval is received",
+        "- You SHOULD present a 'what you are giving up' summary so the user understands tradeoffs"
+      ],
+      "validation": "Confirm that the approval presentation is complete and waiting for user response. List the approval options presented. Do NOT proceed past this task until the user has explicitly approved the action plan."
+    },
+    {
+      "task_id": 6,
+      "task_name": "apply_closures",
+      "constraints": [
+        "- You MUST only apply closures for surfaces the user explicitly approved",
+        "- You MUST apply closures in dependency order (e.g., disable a service before modifying its config file)",
+        "- You MUST use the closure method specified in the surface catalog (registry write, config edit, service disable, preference toggle, hosts file entry)",
+        "- You MUST create a backup or record the previous state before each change where the method supports it",
+        "- You MUST log every change with: surface ID, action taken, previous state, new state, method used, timestamp",
+        "- You MUST stop and report if a closure method fails — do not silently skip",
+        "- You MUST NOT apply closures to surfaces that were not approved"
+      ],
+      "validation": "Report: total closures applied, count by method (registry/config/service/toggle/other), any failures with surface ID and error detail, and confirm that only approved surfaces were modified. Include the backup/rollback locations."
+    },
+    {
+      "task_id": 7,
+      "task_name": "verify_closures",
+      "constraints": [
+        "- You MUST re-probe every surface where a closure was applied",
+        "- You MUST confirm the new state matches the expected DISABLED or BLOCKED state",
+        "- You MUST flag any closures that did not stick (state reverted, probe still shows enabled)",
+        "- For closures that failed verification, you MUST attempt to determine why (update reverted it, method insufficient, dependency blocked it)",
+        "- You MUST NOT apply additional closures during verification — this is verification only",
+        "- You SHOULD check for any NEW surfaces that may have appeared during the process"
+      ],
+      "validation": "Report: verified count, failed-verification count with surface IDs and suspected reasons, any new surfaces discovered. The verification report determines whether the audit was successful or needs follow-up."
+    },
+    {
+      "task_id": 8,
+      "task_name": "report_and_document",
+      "constraints": [
+        "- You MUST produce a final summary organized as: CHANGED (surface, method, before, after), FAILED (surface, attempted method, reason), DECLINED (surface, tier, reason if given), GAPS (known surfaces that could not be addressed with rationale)",
+        "- You MUST provide rollback instructions for every change made (reverse the method, restore from backup)",
+        "- You MUST suggest next steps: browser extensions for additional protection (uBlock Origin, Privacy Badger), VPN consideration, DNS-over-HTTPS configuration, additional OS-specific hardening",
+        "- You MUST include a re-audit recommendation: when to run this again (after OS update, after browser update, quarterly)",
+        "- You MUST timestamp the report and include the system fingerprint so future audits can detect drift",
+        "- You MAY create before/after metrics: surface count before (enabled/total) vs after"
+      ],
+      "validation": "Confirm the final report is complete with all required sections (Changes, Failures, Declined, Gaps, Rollback, Next Steps, Re-audit). The audit is complete when this report is delivered."
+    }
+  ]
+}

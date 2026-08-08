@@ -1,0 +1,607 @@
+{
+  "_schema": "privacy-champion/surface-catalog/1",
+  "_description": "Known telemetry and data-exfiltration surfaces organized by platform. Each surface has a unique ID, probe method, closure method, and metadata.",
+  "_maintenance": "Add new surfaces here as OS/browser updates introduce new telemetry channels. Remove surfaces that are no longer relevant.",
+
+  "platforms": {
+    "windows": {
+      "os_family": "Windows",
+      "surfaces": {
+        "os": [
+          {
+            "surface_id": "win-diag-data",
+            "category": "os",
+            "name": "Diagnostic Data (Telemetry Level)",
+            "description": "Windows diagnostic and usage data sent to Microsoft. 'Full' level includes browsing history, app usage, and typed text.",
+            "severity": "HIGH",
+            "versions": ["10", "11"],
+            "probe_method": "reg query HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection /v AllowTelemetry",
+            "closure_method": "reg add HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection /v AllowTelemetry /t REG_DWORD /d 0 /f",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "NONE",
+            "requires_admin": true,
+            "notes": "Setting to 0 (Security) only available on Enterprise/Education SKUs. On Pro/Home, minimum is 1 (Basic). Setting still reduces data significantly."
+          },
+          {
+            "surface_id": "win-advertising-id",
+            "category": "os",
+            "name": "Advertising ID",
+            "description": "Unique per-device identifier used by apps to serve targeted ads. Resettable but re-enabled by default.",
+            "severity": "MEDIUM",
+            "versions": ["10", "11"],
+            "probe_method": "reg query HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo /v Enabled",
+            "closure_method": "reg add HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo /v Enabled /t REG_DWORD /d 0 /f",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "NONE",
+            "requires_admin": false
+          },
+          {
+            "surface_id": "win-tailored-experiences",
+            "category": "os",
+            "name": "Tailored Experiences",
+            "description": "Microsoft uses diagnostic data to show personalized tips, ads, and recommendations within Windows.",
+            "severity": "MEDIUM",
+            "versions": ["10", "11"],
+            "probe_method": "reg query HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Privacy /v TailoredExperiencesWithDiagnosticDataEnabled",
+            "closure_method": "reg add HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Privacy /v TailoredExperiencesWithDiagnosticDataEnabled /t REG_DWORD /d 0 /f",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "MINOR",
+            "requires_admin": false,
+            "notes": "Disabling removes personalized tips and ads in Windows interface."
+          },
+          {
+            "surface_id": "win-location-service",
+            "category": "os",
+            "name": "Location Service",
+            "description": "Windows and apps can access device location. System-wide location tracking.",
+            "severity": "HIGH",
+            "versions": ["10", "11"],
+            "probe_method": "reg query HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\location /v Value",
+            "closure_method": "reg add HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\location /v Value /t REG_SZ /d Deny /f",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "MODERATE",
+            "requires_admin": true,
+            "notes": "Disabling breaks map apps, weather location, find-my-device. Can be re-enabled per-app."
+          },
+          {
+            "surface_id": "win-activity-history",
+            "category": "os",
+            "name": "Activity History / Timeline",
+            "description": "Windows records app launches, file access, and browsing activity. Synced across devices if Microsoft account is used.",
+            "severity": "HIGH",
+            "versions": ["10", "11"],
+            "probe_method": "reg query HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Microsoft\\Windows\\System /v EnableActivityFeed",
+            "closure_method": "reg add HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Microsoft\\Windows\\System /v EnableActivityFeed /t REG_DWORD /d 0 /f",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "MINOR",
+            "requires_admin": true,
+            "notes": "Disabling removes Timeline feature and cross-device activity sync."
+          },
+          {
+            "surface_id": "win-cortana-web-search",
+            "category": "os",
+            "name": "Cortana & Web Search Integration",
+            "description": "Local search queries are sent to Bing. Cortana listens for voice activation and collects usage data.",
+            "severity": "MEDIUM",
+            "versions": ["10", "11"],
+            "probe_method": "reg query HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Search /v BingSearchEnabled",
+            "closure_method": "reg add HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Search /v BingSearchEnabled /t REG_DWORD /d 0 /f",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "MINOR",
+            "requires_admin": false,
+            "notes": "Disabling stops web results in Start Menu search. Local file search unaffected."
+          },
+          {
+            "surface_id": "win-error-reporting",
+            "category": "os",
+            "name": "Error Reporting",
+            "description": "Windows Error Reporting sends crash dumps which may contain memory contents including PII.",
+            "severity": "MEDIUM",
+            "versions": ["10", "11"],
+            "probe_method": "reg query HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\Windows Error Reporting /v Disabled",
+            "closure_method": "reg add HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\Windows Error Reporting /v Disabled /t REG_DWORD /d 1 /f",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "NONE",
+            "requires_admin": true,
+            "notes": "Crash dumps won't be sent to Microsoft. You won't get 'check for solution' suggestions."
+          },
+          {
+            "surface_id": "win-find-my-device",
+            "category": "os",
+            "name": "Find My Device",
+            "description": "Periodically transmits device location to Microsoft for device tracking.",
+            "severity": "HIGH",
+            "versions": ["10", "11"],
+            "probe_method": "reg query HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Settings\\FindMyDevice /v LocationSyncEnabled",
+            "closure_method": "reg add HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Settings\\FindMyDevice /v LocationSyncEnabled /t REG_DWORD /d 0 /f",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "MODERATE",
+            "requires_admin": true,
+            "notes": "You won't be able to locate this device remotely if lost."
+          },
+          {
+            "surface_id": "win-typing-inking",
+            "category": "os",
+            "name": "Typing & Inking Data Collection",
+            "description": "Windows collects typing and handwriting patterns to improve recognition. Keystroke patterns are transmitted.",
+            "severity": "HIGH",
+            "versions": ["10", "11"],
+            "probe_method": "reg query HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\InputPersonalization /v RestrictImplicitTextCollection",
+            "closure_method": "reg add HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\InputPersonalization /v RestrictImplicitTextCollection /t REG_DWORD /d 1 /f",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "MINOR",
+            "requires_admin": false,
+            "notes": "Autocorrect and text suggestions may become less accurate."
+          },
+          {
+            "surface_id": "win-wifi-sense",
+            "category": "os",
+            "name": "Wi-Fi Sense & Hotspot Sharing",
+            "description": "Windows shares Wi-Fi credentials with contacts and automatically connects to suggested open hotspots.",
+            "severity": "MEDIUM",
+            "versions": ["10", "11"],
+            "probe_method": "reg query HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\WcmSvc\\wifinetworkmanager\\config /v AutoConnectAllowedOEM",
+            "closure_method": "reg add HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\WcmSvc\\wifinetworkmanager\\config /v AutoConnectAllowedOEM /t REG_DWORD /d 0 /f",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "NONE",
+            "requires_admin": true
+          }
+        ],
+        "browsers": {
+          "chrome": [
+            {
+              "surface_id": "chrome-usage-stats",
+              "category": "browser",
+              "name": "Usage Statistics & Crash Reports",
+              "description": "Chrome sends usage statistics, crash reports, and feature usage data to Google.",
+              "severity": "MEDIUM",
+              "probe_method": "Check %LOCALAPPDATA%\\Google\\Chrome\\User Data\\Local State for 'user_experience_metrics.reporting_enabled' and 'browser.crash_dumps'",
+              "closure_method": "Disable 'Make searches and browsing better / Send usage statistics and crash reports' in chrome://settings/privacy. Sets metrics_reporting and crash_reporting prefs.",
+              "reversibility": "REVERSIBLE",
+              "user_impact": "NONE"
+            },
+            {
+              "surface_id": "chrome-search-suggestions",
+              "category": "browser",
+              "name": "Search & URL Suggestions",
+              "description": "Characters typed in the address bar are sent to the default search engine for autocomplete suggestions.",
+              "severity": "MEDIUM",
+              "probe_method": "Check preference 'search.suggest_enabled' in Chrome profile Preferences file",
+              "closure_method": "Disable 'Autocomplete searches and URLs' in chrome://settings/syncSetup. Sets search.suggest_enabled to false.",
+              "reversibility": "REVERSIBLE",
+              "user_impact": "MINOR",
+              "notes": "You can still search by pressing Enter. Suggestions just won't appear as you type."
+            },
+            {
+              "surface_id": "chrome-spell-check",
+              "category": "browser",
+              "name": "Enhanced Spell Check",
+              "description": "Text typed in forms is sent to Google servers for spell checking. Basic spell check uses local dictionary only.",
+              "severity": "HIGH",
+              "probe_method": "Check preference 'spellcheck.use_spelling_service' in Chrome profile Preferences file",
+              "closure_method": "Disable 'Enhanced spell check' in chrome://settings/languages. Switch to 'Basic spell check'.",
+              "reversibility": "REVERSIBLE",
+              "user_impact": "MINOR",
+              "notes": "Basic spell check remains functional. Only Google-server-side checking is disabled."
+            },
+            {
+              "surface_id": "chrome-safe-browsing",
+              "category": "browser",
+              "name": "Safe Browsing (Enhanced Protection)",
+              "description": "URLs and file downloads are checked against Google's Safe Browsing database. Enhanced mode sends data in real-time and may include page content.",
+              "severity": "MEDIUM",
+              "probe_method": "Check preference 'safebrowsing.enabled' and 'safebrowsing.enhanced' in Chrome profile Preferences file",
+              "closure_method": "Set Safe Browsing to 'Standard protection' or 'No protection' in chrome://settings/security. Standard still checks URLs locally against a downloaded list.",
+              "reversibility": "REVERSIBLE",
+              "user_impact": "MODERATE",
+              "notes": "Disabling entirely removes phishing/malware URL protection. Standard protection is a reasonable middle ground."
+            },
+            {
+              "surface_id": "chrome-signin-sync",
+              "category": "browser",
+              "name": "Chrome Sign-in & Sync",
+              "description": "When signed into Chrome, browsing data (history, bookmarks, passwords, open tabs) syncs to Google account.",
+              "severity": "HIGH",
+              "probe_method": "Check if Chrome is signed in: look for 'account_info' in Local State file. Check sync state in Preferences.",
+              "closure_method": "Sign out of Chrome or disable sync in chrome://settings/syncSetup. Can selectively disable sync categories.",
+              "reversibility": "REVERSIBLE",
+              "user_impact": "MODERATE",
+              "notes": "Disabling sync means bookmarks, passwords, and history won't sync across devices."
+            },
+            {
+              "surface_id": "chrome-password-manager-telemetry",
+              "category": "browser",
+              "name": "Password Manager Telemetry",
+              "description": "Chrome's password manager reports usage patterns and may send password breach data.",
+              "severity": "MEDIUM",
+              "probe_method": "Check 'credentials_enable_service' and 'credentials_enable_autosignin' in Preferences",
+              "closure_method": "Disable 'Offer to save passwords' and 'Auto Sign-in' in chrome://settings/passwords",
+              "reversibility": "REVERSIBLE",
+              "user_impact": "MINOR",
+              "notes": "You'll need to manage passwords manually or use a third-party password manager."
+            }
+          ],
+          "firefox": [
+            {
+              "surface_id": "firefox-telemetry",
+              "category": "browser",
+              "name": "Firefox Telemetry & Studies",
+              "description": "Firefox collects technical and interaction data. Studies may install experimental features.",
+              "severity": "MEDIUM",
+              "probe_method": "Check about:config prefs: toolkit.telemetry.enabled, datareporting.healthreport.uploadEnabled, app.normandy.enabled, app.shield.optoutstudies.enabled",
+              "closure_method": "Disable 'Allow Firefox to send technical and interaction data' and 'Allow Firefox to install and run studies' in about:preferences#privacy",
+              "reversibility": "REVERSIBLE",
+              "user_impact": "NONE"
+            },
+            {
+              "surface_id": "firefox-crash-reports",
+              "category": "browser",
+              "name": "Crash Reports",
+              "description": "Firefox sends crash reports to Mozilla which may include memory contents.",
+              "severity": "MEDIUM",
+              "probe_method": "Check about:crashes for submitted reports. Check pref: browser.crashReports.unsubmittedCheck.enabled",
+              "closure_method": "Set browser.crashReports.unsubmittedCheck.enabled to false in about:config",
+              "reversibility": "REVERSIBLE",
+              "user_impact": "NONE"
+            },
+            {
+              "surface_id": "firefox-search-suggestions",
+              "category": "browser",
+              "name": "Search Suggestions",
+              "description": "Characters typed in the search/address bar are sent to the search engine.",
+              "severity": "MEDIUM",
+              "probe_method": "Check about:config pref: browser.search.suggest.enabled",
+              "closure_method": "Disable 'Provide search suggestions' in about:preferences#search",
+              "reversibility": "REVERSIBLE",
+              "user_impact": "MINOR"
+            },
+            {
+              "surface_id": "firefox-dns-over-https",
+              "category": "network",
+              "name": "DNS-over-HTTPS (Default Resolver)",
+              "description": "Firefox may route DNS queries through Cloudflare or another third party by default, bypassing system DNS settings.",
+              "severity": "MEDIUM",
+              "probe_method": "Check about:config pref: network.trr.mode (0=off, 1=reserved, 2=DoH first, 3=DoH only, 5=off by choice)",
+              "closure_method": "Set network.trr.mode to 5 (off by choice) or 0 (off) in about:config. Alternatively configure a trusted DoH provider.",
+              "reversibility": "REVERSIBLE",
+              "user_impact": "NONE",
+              "notes": "DoH is privacy-positive if you trust the resolver. The concern is the default resolver choice. Consider switching to a privacy-respecting DoH provider rather than disabling."
+            },
+            {
+              "surface_id": "firefox-pocket",
+              "category": "browser",
+              "name": "Pocket Integration",
+              "description": "Firefox integrates Pocket recommendations on the new tab page. Usage data is shared with Pocket (Mozilla-owned).",
+              "severity": "LOW",
+              "probe_method": "Check about:config pref: extensions.pocket.enabled",
+              "closure_method": "Set extensions.pocket.enabled to false in about:config",
+              "reversibility": "REVERSIBLE",
+              "user_impact": "MINOR",
+              "notes": "Removes Pocket recommendations from new tab page."
+            }
+          ],
+          "edge": [
+            {
+              "surface_id": "edge-telemetry",
+              "category": "browser",
+              "name": "Edge Diagnostic Data",
+              "description": "Edge sends diagnostic and usage data to Microsoft. Separate from Windows telemetry — both can be active simultaneously.",
+              "severity": "MEDIUM",
+              "probe_method": "Check edge://settings/privacy for 'Optional diagnostic data' and 'Search and service improvement' settings",
+              "closure_method": "Disable 'Optional diagnostic data' and 'Improve search and services' in edge://settings/privacy",
+              "reversibility": "REVERSIBLE",
+              "user_impact": "NONE"
+            },
+            {
+              "surface_id": "edge-shopping-assist",
+              "category": "browser",
+              "name": "Shopping & Price Comparison",
+              "description": "Edge sends browsing data to Microsoft for shopping recommendations and price comparisons.",
+              "severity": "MEDIUM",
+              "probe_method": "Check edge://settings/privacy for 'Save time and money with Shopping in Microsoft Edge'",
+              "closure_method": "Disable shopping features in edge://settings/privacy",
+              "reversibility": "REVERSIBLE",
+              "user_impact": "NONE",
+              "notes": "Removes price comparison popups and shopping notifications."
+            }
+          ]
+        },
+        "network": [
+          {
+            "surface_id": "win-webrtc-leak",
+            "category": "network",
+            "name": "WebRTC IP Leakage",
+            "description": "WebRTC can leak local and public IP addresses even when using a VPN. Affects all browsers.",
+            "severity": "HIGH",
+            "probe_method": "Check browser-level: Chrome: go to chrome://settings/privacy, Firefox: media.peerconnection.enabled in about:config",
+            "closure_method": "Disable WebRTC in each browser: Chrome requires extension or flag. Firefox: set media.peerconnection.enabled to false.",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "MODERATE",
+            "notes": "Disabling WebRTC breaks browser-based video/audio calling (Meet, Zoom web, Teams web)."
+          },
+          {
+            "surface_id": "win-dns-leak",
+            "category": "network",
+            "name": "DNS Leakage (System Resolver)",
+            "description": "System DNS queries may go to ISP-assigned or default resolvers, leaking browsing domains.",
+            "severity": "HIGH",
+            "probe_method": "Run 'nslookup whoami.akamai.net' or check configured DNS servers via 'ipconfig /all'",
+            "closure_method": "Configure privacy-respecting DNS (Quad9, Mullvad, or local) in network adapter settings or via DoH.",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "NONE",
+            "notes": "Switching to Quad9 (9.9.9.9) or Mullvad DNS is recommended. Full prevention requires system-wide DoH/DoT."
+          }
+        ]
+      }
+    },
+
+    "macos": {
+      "os_family": "macOS",
+      "surfaces": {
+        "os": [
+          {
+            "surface_id": "mac-analytics",
+            "category": "os",
+            "name": "Mac Analytics",
+            "description": "macOS sends diagnostic and usage data to Apple. Includes crash reports, app usage, and system configuration.",
+            "severity": "HIGH",
+            "versions": ["13", "14", "15"],
+            "probe_method": "Check System Settings > Privacy & Security > Analytics & Improvements. Look for 'Share Mac Analytics' and 'Share with App Developers'.",
+            "closure_method": "Disable 'Share Mac Analytics' and 'Share with App Developers' in System Settings. Also check /Library/Application Support/CrashReporter/",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "NONE"
+          },
+          {
+            "surface_id": "mac-advertising",
+            "category": "os",
+            "name": "Apple Advertising & Personalization",
+            "description": "Apple serves personalized ads in App Store, News, and Stocks based on device data and App Store activity.",
+            "severity": "MEDIUM",
+            "versions": ["13", "14", "15"],
+            "probe_method": "Check System Settings > Privacy & Security > Apple Advertising for 'Personalized Ads'",
+            "closure_method": "Disable 'Personalized Ads' in System Settings > Privacy & Security > Apple Advertising",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "NONE",
+            "notes": "You'll still see ads in the App Store — they just won't be targeted based on your activity."
+          },
+          {
+            "surface_id": "mac-siri-analytics",
+            "category": "os",
+            "name": "Siri & Dictation Analytics",
+            "description": "Siri interactions and dictation audio may be stored and reviewed by Apple for improvement.",
+            "severity": "HIGH",
+            "versions": ["13", "14", "15"],
+            "probe_method": "Check System Settings > Privacy & Security > Analytics & Improvements for 'Improve Siri & Dictation'",
+            "closure_method": "Disable 'Improve Siri & Dictation' in System Settings. Also consider disabling Siri entirely in System Settings > Siri.",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "MODERATE",
+            "notes": "Disabling Siri entirely removes voice assistant functionality."
+          },
+          {
+            "surface_id": "mac-location-services",
+            "category": "os",
+            "name": "Location Services",
+            "description": "macOS provides location data to apps and system services. System-level location is used for Find My Mac and time zone.",
+            "severity": "HIGH",
+            "versions": ["13", "14", "15"],
+            "probe_method": "Check System Settings > Privacy & Security > Location Services",
+            "closure_method": "Disable Location Services globally or per-app in System Settings > Privacy & Security > Location Services",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "MODERATE",
+            "notes": "Disabling globally breaks Find My Mac, automatic time zone, and map apps."
+          },
+          {
+            "surface_id": "mac-app-analytics",
+            "category": "os",
+            "name": "App Store & App Analytics Sharing",
+            "description": "App developers may receive crash and usage data from your device. Third-party apps may also include their own analytics.",
+            "severity": "MEDIUM",
+            "versions": ["13", "14", "15"],
+            "probe_method": "Check System Settings > Privacy & Security > Analytics & Improvements for 'Share with App Developers'",
+            "closure_method": "Disable 'Share with App Developers' in System Settings",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "NONE"
+          }
+        ],
+        "browsers": {
+          "safari": [
+            {
+              "surface_id": "safari-search-suggestions",
+              "category": "browser",
+              "name": "Safari Search & Safari Suggestions",
+              "description": "Safari sends search queries and partial address bar input to the selected search engine. Safari Suggestions may send data to Apple.",
+              "severity": "MEDIUM",
+              "probe_method": "Check Safari > Settings > Search for 'Include Safari Suggestions' and 'Include search engine suggestions'",
+              "closure_method": "Disable both 'Include Safari Suggestions' and 'Include search engine suggestions' in Safari Settings > Search",
+              "reversibility": "REVERSIBLE",
+              "user_impact": "MINOR"
+            },
+            {
+              "surface_id": "safari-privacy-report",
+              "category": "browser",
+              "name": "Safari Privacy Report Data",
+              "description": "Safari's Intelligent Tracking Prevention collects data about trackers. This data stays on device but contributes to Apple's tracker lists if shared.",
+              "severity": "LOW",
+              "versions": ["14", "15"],
+              "probe_method": "Check Safari > Settings > Privacy for tracking prevention settings",
+              "closure_method": "Safari's ITP is privacy-positive and doesn't exfiltrate personal data. Recommend keeping enabled.",
+              "reversibility": "REVERSIBLE",
+              "user_impact": "NONE",
+              "notes": "ITP is a privacy feature, not a privacy risk. This surface is flagged for awareness, not recommended for disabling."
+            }
+          ],
+          "chrome": [],  
+          "firefox": [],
+          "edge": []
+        },
+        "network": [
+          {
+            "surface_id": "mac-webrtc-leak",
+            "category": "network",
+            "name": "WebRTC IP Leakage",
+            "description": "WebRTC can leak local and public IP addresses even when using a VPN.",
+            "severity": "HIGH",
+            "versions": ["13", "14", "15"],
+            "probe_method": "Check Safari: enabled by default. Chrome/Firefox: check browser-level settings.",
+            "closure_method": "Safari: no built-in disable. Use a browser extension or disable in other browsers. Chrome: flag or extension. Firefox: media.peerconnection.enabled=false.",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "MODERATE"
+          },
+          {
+            "surface_id": "mac-dns-leak",
+            "category": "network",
+            "name": "DNS Leakage",
+            "description": "System DNS queries may go to ISP-assigned resolvers. macOS uses the router/DHCP DNS by default.",
+            "severity": "HIGH",
+            "versions": ["13", "14", "15"],
+            "probe_method": "Check Network Settings > Advanced > DNS for configured DNS servers",
+            "closure_method": "Configure trusted DNS servers in Network Settings or use a system-wide DoH/DoT profile.",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "NONE"
+          }
+        ],
+        "_chrome_inherits": "chrome surfaces from windows are OS-agnostic; same probe/closure applies on macOS",
+        "_firefox_inherits": "firefox surfaces from windows are OS-agnostic; same probe/closure applies on macOS",
+        "_edge_inherits": "edge surfaces from windows are OS-agnostic; same probe/closure applies on macOS"
+      }
+    },
+
+    "linux": {
+      "os_family": "Linux",
+      "surfaces": {
+        "os": [
+          {
+            "surface_id": "linux-ubuntu-report",
+            "category": "os",
+            "name": "Ubuntu Report (popularity-contest)",
+            "description": "Ubuntu can report installed packages and usage frequency to Canonical. Used for prioritizing package maintenance.",
+            "severity": "MEDIUM",
+            "distributions": ["Ubuntu 22.04+", "Debian 12+"],
+            "probe_method": "Check if popularity-contest package is installed: dpkg -l popularity-contest. Check participation: cat /etc/popularity-contest.conf 2>/dev/null",
+            "closure_method": "Remove popularity-contest: sudo apt remove popularity-contest. Or disable: sudo dpkg-reconfigure popularity-contest and select No.",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "NONE"
+          },
+          {
+            "surface_id": "linux-apport-error",
+            "category": "os",
+            "name": "Apport Error Reporting (Ubuntu)",
+            "description": "Ubuntu's error reporting system collects crash dumps which may contain sensitive data.",
+            "severity": "HIGH",
+            "distributions": ["Ubuntu 22.04+"],
+            "probe_method": "Check if apport is enabled: cat /etc/default/apport. Check service: systemctl is-active apport.service",
+            "closure_method": "Disable apport: sudo systemctl stop apport.service && sudo systemctl disable apport.service. Edit /etc/default/apport: enabled=0.",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "NONE",
+            "notes": "Crash reports won't be generated. You'll need to debug crashes manually."
+          },
+          {
+            "surface_id": "linux-whoopsie",
+            "category": "os",
+            "name": "Whoopsie Crash Reporter (Ubuntu)",
+            "description": "Sends crash reports from Apport to Canonical's error database (daisy.ubuntu.com).",
+            "severity": "HIGH",
+            "distributions": ["Ubuntu 22.04+"],
+            "probe_method": "Check if whoopsie is running: systemctl is-active whoopsie.service. Check if installed: dpkg -l whoopsie",
+            "closure_method": "Remove whoopsie: sudo apt remove whoopsie. Or stop and mask: sudo systemctl stop whoopsie && sudo systemctl mask whoopsie.",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "NONE"
+          },
+          {
+            "surface_id": "linux-geoclue",
+            "category": "os",
+            "name": "GeoClue Location Service",
+            "description": "Provides location services to desktop applications using nearby Wi-Fi networks and IP geolocation (Mozilla Location Service).",
+            "severity": "HIGH",
+            "distributions": ["Ubuntu 22.04+", "Fedora 39+", "Debian 12+"],
+            "probe_method": "Check if geoclue is running: systemctl --user is-active geoclue.service 2>/dev/null || pgrep -a geoclue",
+            "closure_method": "Stop and mask the user service: systemctl --user stop geoclue.service && systemctl --user mask geoclue.service. Or remove: sudo apt remove geoclue-2.0",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "MODERATE",
+            "notes": "Disabling breaks automatic timezone, weather apps that use location, and map applications."
+          },
+          {
+            "surface_id": "linux-pkg-metrics",
+            "category": "os",
+            "name": "Package Usage Metrics",
+            "description": "Some distributions collect package usage statistics. On Fedora: DNF countme. On Ubuntu: optional popularity-contest. On Debian: popularity-contest.",
+            "severity": "LOW",
+            "distributions": ["Fedora 39+", "Ubuntu 22.04+", "Debian 12+"],
+            "probe_method": "Fedora: check /etc/dnf/dnf.conf for countme=1. Ubuntu/Debian: check popularity-contest as above.",
+            "closure_method": "Fedora: set countme=0 in /etc/dnf/dnf.conf. Ubuntu/Debian: remove or reconfigure popularity-contest.",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "NONE"
+          }
+        ],
+        "browsers": {
+          "chrome": [],
+          "firefox": [],
+          "brave": [
+            {
+              "surface_id": "brave-telemetry",
+              "category": "browser",
+              "name": "Brave Telemetry & P3A",
+              "description": "Brave collects anonymous privacy-preserving product analytics (P3A). No personal data but does report usage patterns.",
+              "severity": "LOW",
+              "probe_method": "Check brave://settings/privacy for 'Allow privacy-preserving product analytics (P3A)' and 'Automatically send daily usage ping to Brave'",
+              "closure_method": "Disable both P3A and daily usage ping in brave://settings/privacy",
+              "reversibility": "REVERSIBLE",
+              "user_impact": "NONE",
+              "notes": "Brave's telemetry is already privacy-preserving by design. This is a conservative option for users who want zero telemetry."
+            },
+            {
+              "surface_id": "brave-rewards-ads",
+              "category": "browser",
+              "name": "Brave Rewards & Ads",
+              "description": "If Brave Rewards is enabled, Brave serves privacy-preserving ads and collects attention data locally. Ad catalog is downloaded.",
+              "severity": "LOW",
+              "probe_method": "Check brave://rewards for enrollment status",
+              "closure_method": "Disable Brave Rewards in brave://rewards if privacy is a higher priority than earning BAT.",
+              "reversibility": "REVERSIBLE",
+              "user_impact": "MINOR",
+              "notes": "Brave Rewards is privacy-respecting by design (local ad matching). This is optional for users who prefer zero ad interaction."
+            }
+          ]
+        },
+        "network": [
+          {
+            "surface_id": "linux-systemd-resolved-dns",
+            "category": "network",
+            "name": "systemd-resolved DNS Configuration",
+            "description": "systemd-resolved manages DNS and may use ISP/router-provided resolvers. Can leak DNS queries.",
+            "severity": "HIGH",
+            "distributions": ["Ubuntu 22.04+", "Fedora 39+", "Debian 12+"],
+            "probe_method": "Check active DNS: resolvectl status or systemd-resolve --status",
+            "closure_method": "Configure DNS over TLS in /etc/systemd/resolved.conf: DNS=9.9.9.9#dns.quad9.net and DNSOverTLS=yes",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "NONE",
+            "notes": "Recommended: Quad9 (9.9.9.9) or Mullvad DNS with DoT enabled."
+          },
+          {
+            "surface_id": "linux-webrtc-leak",
+            "category": "network",
+            "name": "WebRTC IP Leakage",
+            "description": "WebRTC can leak local and public IP addresses even when using a VPN.",
+            "severity": "HIGH",
+            "distributions": ["Ubuntu 22.04+", "Fedora 39+", "Debian 12+"],
+            "probe_method": "Check browser-level settings for WebRTC. See platform-agnostic browser entries.",
+            "closure_method": "Chrome/Brave: requires extension or flag. Firefox: media.peerconnection.enabled=false in about:config.",
+            "reversibility": "REVERSIBLE",
+            "user_impact": "MODERATE"
+          }
+        ],
+        "_chrome_inherits": "chrome surfaces from windows are OS-agnostic; same probe/closure applies on Linux",
+        "_firefox_inherits": "firefox surfaces from windows are OS-agnostic; same probe/closure applies on Linux",
+        "_edge_inherits": "edge surfaces from windows are OS-agnostic; same probe/closure applies on Linux"
+      }
+    }
+  },
+
+  "_notes": {
+    "shared_browsers": "Chrome, Firefox, and Edge surfaces described under 'windows' are platform-agnostic and apply on macOS and Linux as well. The catalog uses inheritance markers to avoid duplication.",
+    "brave": "Brave is listed under Linux but the surfaces apply to all platforms. Brave has minimal telemetry by design.",
+    "missing_platforms": "ChromeOS, iOS, and Android are intentionally not included in v0.1. Their telemetry models differ significantly from desktop OSes.",
+    "how_to_add": "To add a new surface: add an entry with unique surface_id under the appropriate platform/category. Include probe_method and closure_method that can be executed via shell/registry/file-check.",
+    "testing": "Each probe_method should be testable with standard system tools. Each closure_method should be reversible or clearly documented as irreversible."
+  }
+}

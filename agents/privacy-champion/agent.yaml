@@ -1,0 +1,162 @@
+# Privacy Champion — Agent Manifest
+# TAO package specification v0.1
+
+agent:
+  name: privacy-champion
+  slug: privacy-champion
+  version: 0.1.0
+  maturity: experimental
+  type: standalone
+
+  purpose: >
+    Audit and harden privacy surfaces on a personal computer. Fingerprint the operating
+    system and installed browsers, enumerate known telemetry and data-exfiltration channels,
+    probe current state, classify risk, present findings for user approval, apply closures,
+    verify, and produce an evidence-backed audit report with rollback instructions.
+
+  good_fit:
+    - First-time setup of a new personal computer
+    - Periodic privacy hygiene audit (quarterly recommended)
+    - Suspicion that a system update re-enabled telemetry
+    - Pre-travel privacy preparation for crossing borders
+    - Journalists, researchers, and others with elevated threat models
+    - Anyone who wants to understand what their computer is sharing and with whom
+
+  poor_fit:
+    - Corporate-managed or MDM-enrolled devices (group policy may override changes)
+    - Servers or headless systems (different threat model, different surfaces)
+    - Mobile devices (iOS/Android telemetry models differ significantly)
+    - Users unwilling to review and approve changes before they are applied
+    - Air-gapped or fully offline systems (network surfaces are irrelevant)
+
+  # ── Authority ────────────────────────────────────────────────────
+  authority:
+    read: automatic
+    propose: automatic
+    mutate_os_settings: explicit_approval_per_surface
+    mutate_browser_settings: explicit_approval_per_surface
+    mutate_network_config: explicit_approval_per_surface
+    destructive: prohibited_by_default
+    escalation: halt_and_report
+
+  authority_rationale: >
+    Read-only operations (fingerprinting, probing, classifying) are safe and run
+    automatically. Any mutation — even a simple preference toggle — requires explicit
+    per-surface approval. Destructive or irreversible changes (disabling core services,
+    modifying system-level configurations) require additional confirmation with a
+    warning. The agent never infers approval from context or prior runs.
+
+  # ── Inputs / Outputs ──────────────────────────────────────────────
+  inputs:
+    - filesystem_access: Required for probing config files, registry, preferences
+    - process_privilege: Standard user sufficient for most checks; admin/root for OS-level changes
+    - shell_access: Required for running probe and closure scripts
+
+  outputs:
+    - system_fingerprint: OS, version, browsers, privilege level
+    - surface_inventory: All known telemetry channels for this platform
+    - state_report: Current enabled/disabled state per surface
+    - risk_classification: Severity, reversibility, impact per surface
+    - action_plan: Tiered recommendations for user approval
+    - change_log: Every applied closure with before/after state and method
+    - verification_report: Re-probe results confirming closures
+    - final_report: Complete audit trail with rollback instructions and next steps
+
+  # ── State & Memory ────────────────────────────────────────────────
+  state:
+    - audit_timestamp: When the audit was performed
+    - system_fingerprint: For drift detection on re-audit
+    - surface_states: Before and after per surface
+    - approved_actions: What the user authorized
+    - applied_changes: What was actually changed
+    - verification_results: What stuck and what didn't
+    retention: Local file in workspace; user controls deletion
+    sharing: Never transmitted; the agent does not phone home
+
+  # ── Operating Model ───────────────────────────────────────────────
+  operating_loop: taskrails/privacy-audit.taskrail.json
+  core_sop: sops/privacy-audit.sop.md
+  scripts:
+    - scripts/fingerprint.sh        # OS/browser detection
+    - scripts/enumerate_surfaces.sh  # Load surface catalog
+    - scripts/probe_surface.sh       # Check a surface's state
+    - scripts/apply_closure.sh       # Apply a closure method
+    - scripts/verify_closure.sh      # Re-check after closure
+  knowledge_base:
+    - data/surface-catalog.json      # Known surfaces per platform
+
+  # ── Recovery ──────────────────────────────────────────────────────
+  recovery:
+    - halt: Stop and report if a closure method fails
+    - rollback: Every change records previous state; rollback script available
+    - escalate: If insufficient privileges, report what needs admin access
+    - resume: Taskrail state file enables resume after interruption
+
+  # ── Local Adaptation ──────────────────────────────────────────────
+  local_adapter:
+    format: generated YAML
+    path: local/environment.yaml
+    generated_by: onboarding/induction.taskrail.json
+    contents:
+      - detected_os: Auto-populated by fingerprint
+      - detected_browsers: Auto-populated by fingerprint
+      - privilege_level: Auto-populated by fingerprint
+      - user_preferences: Tier defaults, surfaces to skip
+      - backup_location: Where rollback data is stored
+      - report_format: text, markdown, or json
+
+  # ── Compatibility ─────────────────────────────────────────────────
+  compatibility:
+    platforms:
+      - os: Windows
+        versions: ["10", "11"]
+        browsers: ["Chrome", "Firefox", "Edge", "Brave"]
+      - os: macOS
+        versions: ["13 (Ventura)", "14 (Sonoma)", "15 (Sequoia)"]
+        browsers: ["Chrome", "Firefox", "Safari", "Edge", "Brave"]
+      - os: Linux
+        distributions: ["Ubuntu 22.04+", "Fedora 39+", "Debian 12+"]
+        browsers: ["Chrome", "Firefox", "Edge", "Brave"]
+    runtimes:
+      - Pi Coding Agent (pi.dev)
+      - Claude Code (Anthropic)
+      - Codex (OpenAI)
+      - Any platform supporting skills + shell execution
+    minimum_privileges: Standard user (admin/root required for some OS-level closures)
+    dependencies:
+      - bash 4.0+
+      - curl or wget (for some probe methods)
+      - jq (for JSON parsing)
+      - Standard system tools (reg query on Windows, defaults on macOS, systemctl on Linux)
+
+  # ── Lifecycle ──────────────────────────────────────────────────────
+  lifecycle:
+    install: Clone repository; run induction taskrail
+    induct: onboarding/induction.taskrail.json
+    validate: tests/readiness-check.sh
+    upgrade: Pull new version; induction detects and merges config changes
+    rollback: scripts/rollback.sh restores all changes from audit log
+    uninstall: Delete local/ directory and cloned package; no system residue
+
+  # ── Telemetry (of the agent itself) ────────────────────────────────
+  telemetry:
+    opt_in_only: true
+    collected_when_enabled:
+      - agent_version
+      - platform_fingerprint (OS only, no hardware IDs)
+      - surface_counts (enabled/disabled before, enabled/disabled after)
+      - closure_success_rate
+      - errors_and_failures (redacted)
+    never_collected:
+      - Hardware identifiers
+      - IP addresses
+      - User account names
+      - File paths outside the audit workspace
+      - Browser history, bookmarks, or passwords
+      - Any content of user files
+
+  # ── Maintainer ─────────────────────────────────────────────────────
+  maintainer: Richard Dun
+  license: MIT
+  repository: https://github.com/richarddun/privacy-champion
+  feedback: Structured field reports via repository issues

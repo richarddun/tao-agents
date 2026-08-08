@@ -78,7 +78,8 @@ The agent will follow its SOPs: collect evidence → propose → stop at approva
 
 | Agent | Type | Maturity | Description |
 |-------|------|----------|-------------|
-| *(coming soon)* | | | |
+| [**Privacy Champion**](agents/privacy-champion/) | Standalone | Experimental | Audit and harden telemetry surfaces across OS, browsers, and network. 8-step guided audit with per-surface approval gates. |
+| *(more coming soon)* | | | |
 
 Team packages (lead specialist + bounded member agents with explicit handoff contracts) will appear alongside standalone agents.
 
