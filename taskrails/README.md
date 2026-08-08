@@ -1,6 +1,6 @@
 # Taskrails
 
-Named taskrails — progressive-disclosure JSON workflows for TAO agents.
+Named [taskrails](https://richarddun.dev/writing/taskrails/) — progressive-disclosure JSON workflows for TAO agents.
 
 Each `.taskrail.json` file defines a sequence of tasks with embedded
 constraints and validation gates. Agents fetch one task at a time via
