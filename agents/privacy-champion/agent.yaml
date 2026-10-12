@@ -1,12 +1,13 @@
 # Privacy Champion — Agent Manifest
 # TAO package specification v0.1
+# Machine-readable manifest consumed by TAO tooling and host harnesses.
 
 agent:
   name: privacy-champion
   slug: privacy-champion
   version: 0.1.0
   maturity: experimental
-  type: standalone
+  type: agent
 
   purpose: >
     Audit and harden privacy surfaces on a personal computer. Fingerprint the operating
@@ -29,7 +30,7 @@ agent:
     - Users unwilling to review and approve changes before they are applied
     - Air-gapped or fully offline systems (network surfaces are irrelevant)
 
-  # ── Authority ────────────────────────────────────────────────────
+  # ── Authority ──────────────────────────────────────────────────────
   authority:
     read: automatic
     propose: automatic
@@ -40,13 +41,14 @@ agent:
     escalation: halt_and_report
 
   authority_rationale: >
-    Read-only operations (fingerprinting, probing, classifying) are safe and run
+    Read-only operations (fingerprinting, enumerating, probing, classifying) are safe and run
     automatically. Any mutation — even a simple preference toggle — requires explicit
-    per-surface approval. Destructive or irreversible changes (disabling core services,
-    modifying system-level configurations) require additional confirmation with a
-    warning. The agent never infers approval from context or prior runs.
+    per-surface approval. Destructive or irreversible changes require additional confirmation
+    with a warning. The agent never infers approval from context or prior runs; the approval
+    gate is enforced mechanically by scripts/apply_closure.sh, which refuses to act unless
+    invoked with both --apply and --approved.
 
-  # ── Inputs / Outputs ──────────────────────────────────────────────
+  # ── Inputs / Outputs ───────────────────────────────────────────────
   inputs:
     - filesystem_access: Required for probing config files, registry, preferences
     - process_privilege: Standard user sufficient for most checks; admin/root for OS-level changes
@@ -62,41 +64,53 @@ agent:
     - verification_report: Re-probe results confirming closures
     - final_report: Complete audit trail with rollback instructions and next steps
 
-  # ── State & Memory ────────────────────────────────────────────────
+  # ── State & Memory ─────────────────────────────────────────────────
   state:
-    - audit_timestamp: When the audit was performed
-    - system_fingerprint: For drift detection on re-audit
-    - surface_states: Before and after per surface
-    - approved_actions: What the user authorized
-    - applied_changes: What was actually changed
-    - verification_results: What stuck and what didn't
-    retention: Local file in workspace; user controls deletion
+    fields:
+      - audit_timestamp: When the audit was performed
+      - system_fingerprint: For drift detection on re-audit
+      - surface_states: Before and after per surface
+      - approved_actions: What the user authorized
+      - applied_changes: What was actually changed
+      - verification_results: What stuck and what didn't
+    retention: Local files in the workspace (local/); the user controls deletion
     sharing: Never transmitted; the agent does not phone home
 
-  # ── Operating Model ───────────────────────────────────────────────
+  # ── Operating Model ────────────────────────────────────────────────
   operating_loop: taskrails/privacy-audit.taskrail.json
   core_sop: sops/privacy-audit.sop.md
+  taskrails:
+    - taskrails/privacy-audit.taskrail.json
+    - onboarding/induction.taskrail.json
   scripts:
-    - scripts/fingerprint.sh        # OS/browser detection
-    - scripts/enumerate_surfaces.sh  # Load surface catalog
-    - scripts/probe_surface.sh       # Check a surface's state
-    - scripts/apply_closure.sh       # Apply a closure method
-    - scripts/verify_closure.sh      # Re-check after closure
+    - scripts/fingerprint.sh         # OS/browser/tool detection (read-only)
+    - scripts/enumerate_surfaces.sh  # Load + filter the surface catalog (read-only)
+    - scripts/probe_surface.sh       # Probe one surface's state (read-only)
+    - scripts/apply_closure.sh       # Apply a pre-approved closure (mutating)
+    - scripts/verify_closure.sh      # Re-probe after closure (read-only)
+  tests:
+    - tests/readiness-check.sh       # Dependency, catalog, rail and permission checks
+    - tests/boundary_test.sh         # Out-of-scope / over-authority refusals
+    - tests/authority_test.sh        # Approval gate enforcement
+    - tests/evidence_test.sh         # Machine-readable evidence contracts
+    - tests/scenario_test.sh         # Read-only end-to-end rehearsal
+    - tests/run_all.sh               # Run every suite
   knowledge_base:
     - data/surface-catalog.json      # Known surfaces per platform
 
-  # ── Recovery ──────────────────────────────────────────────────────
+  # ── Recovery ───────────────────────────────────────────────────────
   recovery:
     - halt: Stop and report if a closure method fails
-    - rollback: Every change records previous state; rollback script available
-    - escalate: If insufficient privileges, report what needs admin access
+    - rollback: Every applied change is logged; restore backed-up files from local/backups/
+    - escalate: If privileges are insufficient, report what needs admin access
     - resume: Taskrail state file enables resume after interruption
 
-  # ── Local Adaptation ──────────────────────────────────────────────
+  # ── Local Adaptation ───────────────────────────────────────────────
   local_adapter:
     format: generated YAML
     path: local/environment.yaml
     generated_by: onboarding/induction.taskrail.json
+    gitignored: true
     contents:
       - detected_os: Auto-populated by fingerprint
       - detected_browsers: Auto-populated by fingerprint
@@ -105,7 +119,7 @@ agent:
       - backup_location: Where rollback data is stored
       - report_format: text, markdown, or json
 
-  # ── Compatibility ─────────────────────────────────────────────────
+  # ── Compatibility ──────────────────────────────────────────────────
   compatibility:
     platforms:
       - os: Windows
@@ -124,19 +138,20 @@ agent:
       - Any platform supporting skills + shell execution
     minimum_privileges: Standard user (admin/root required for some OS-level closures)
     dependencies:
+      - python3 (required by the bundled scripts)
       - bash 4.0+
-      - curl or wget (for some probe methods)
-      - jq (for JSON parsing)
-      - Standard system tools (reg query on Windows, defaults on macOS, systemctl on Linux)
+      - curl or wget (optional; some manual probe methods)
+      - jq (optional)
 
   # ── Lifecycle ──────────────────────────────────────────────────────
   lifecycle:
-    install: Clone repository; run induction taskrail
+    install: Clone the TAO repository and cd agents/privacy-champion
     induct: onboarding/induction.taskrail.json
     validate: tests/readiness-check.sh
-    upgrade: Pull new version; induction detects and merges config changes
-    rollback: scripts/rollback.sh restores all changes from audit log
-    uninstall: Delete local/ directory and cloned package; no system residue
+    test: tests/run_all.sh
+    upgrade: Pull the new package version; re-run induction to merge local changes
+    rollback: Restore files from local/backups/ and reverse changes per the audit report
+    uninstall: Delete the local/ directory; no system residue beyond applied closures
 
   # ── Telemetry (of the agent itself) ────────────────────────────────
   telemetry:
@@ -156,7 +171,7 @@ agent:
       - Any content of user files
 
   # ── Maintainer ─────────────────────────────────────────────────────
-  maintainer: Richard Dun
+  maintainer: Richard Dunne
   license: MIT
-  repository: https://github.com/richarddun/privacy-champion
+  repository: https://github.com/richarddun/tao-agents/tree/main/agents/privacy-champion
   feedback: Structured field reports via repository issues
