@@ -1,6 +1,6 @@
 {
   "schema": "tao/registry-index/1",
-  "generated": "2026-10-12T21:00:12Z",
+  "generated": "2026-10-12T21:01:06Z",
   "count": 3,
   "agents": [
     {
@@ -12,7 +12,7 @@
       "description": "Audit and harden privacy surfaces on a personal computer. Fingerprint the operating system and installed browsers, enumerate known telemetry and data-exfiltration channels, probe current state, classify risk, present findings for user appro",
       "path": "agents/privacy-champion",
       "manifest": "agents/privacy-champion/agent.yaml",
-      "sha256": "c85ff2efb58d047574918834ee30eb153c351cfb2ca135b1b48de5578496e11a"
+      "sha256": "4d5d92a2a359cb774827cc23e9f990fe8d924572e8df2549c9e11003d17e707e"
     },
     {
       "name": "system-sentinel",

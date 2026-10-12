@@ -66,4 +66,27 @@ assert_eq "unsupported OS enumerates zero surfaces" "$count" "0"
 out="$(bash "$SCRIPTS_DIR/apply_closure.sh" --surface-id linux-webrtc-leak --os linux --apply --approved 2>&1)"; rc=$?
 assert_eq "network manual surface refused (exit 5)" "$rc" "5"
 
+# 8. The approved path works end to end, using a synthetic no-op surface so
+#    nothing on the real system is touched. The gateway to mutation is the
+#    --approved flag; once given, the script probes, applies, logs and
+#    reports an after-state.
+python3 - "$TMP/synth-catalog.json" <<'PY'
+import json, sys
+cat = {"platforms": {"linux": {"os_family": "Linux", "surfaces": {"os": [{
+    "surface_id": "synthetic-surface", "category": "os", "name": "Synthetic",
+    "severity": "LOW", "probe_method": "n/a", "probe_kind": "command",
+    "probe_command": "echo DISABLED", "closure_command": "true",
+    "disabled_indicator": "DISABLED", "enabled_indicator": "ENABLED"}]}}}}
+json.dump(cat, open(sys.argv[1], "w"))
+PY
+out="$(bash "$SCRIPTS_DIR/apply_closure.sh" --surface-id synthetic-surface --os linux \
+        --catalog "$TMP/synth-catalog.json" --log "$TMP/synth.jsonl" \
+        --apply --approved --reason boundary-test 2>&1)"; rc=$?
+assert_eq "approved apply succeeds (exit 0)" "$rc" "0"
+assert_eq "approved apply reports applied" "$(json_get "$out" mode)" "applied"
+assert_file_exists "approved apply writes a change log" "$TMP/synth.jsonl"
+ver="$(bash "$SCRIPTS_DIR/verify_closure.sh" --log "$TMP/synth.jsonl" \
+        --catalog "$TMP/synth-catalog.json" --os linux 2>/dev/null)"
+assert_eq "batch verify from change log passes" "$(json_get "$ver" failed)" "0"
+
 summary "Boundary tests"
