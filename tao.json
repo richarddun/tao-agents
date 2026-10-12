@@ -1,6 +1,8 @@
 {
-  "schema": "tao/registry-index/1",
-  "generated": "2026-10-12T21:01:06Z",
+  "schema": "tao/registry-index/2",
+  "repository": "https://github.com/richarddun/tao-agents",
+  "revision": "3a58586410791b4b9da306ea5c57320836e317b4",
+  "generated": "2026-10-12T21:16:04Z",
   "count": 3,
   "agents": [
     {
@@ -9,7 +11,7 @@
       "type": "agent",
       "version": "0.1.0",
       "maturity": "experimental",
-      "description": "Audit and harden privacy surfaces on a personal computer. Fingerprint the operating system and installed browsers, enumerate known telemetry and data-exfiltration channels, probe current state, classify risk, present findings for user appro",
+      "description": "Audit and harden privacy surfaces on a personal computer. Fingerprint the operating system and installed browsers, enumerate known telemetry and data-exfiltration channels, probe current state…",
       "path": "agents/privacy-champion",
       "manifest": "agents/privacy-champion/agent.yaml",
       "sha256": "4d5d92a2a359cb774827cc23e9f990fe8d924572e8df2549c9e11003d17e707e"
@@ -20,7 +22,7 @@
       "type": "agent",
       "version": "0.1.0",
       "maturity": "experimental",
-      "description": "Inventory and assess the security posture of a personal workstation, read-only. Collects OS, storage, memory, exposure, patching and account facts with a deterministic script, then produces an evidence-backed posture report with per-area ri",
+      "description": "Inventory and assess the security posture of a personal workstation, read-only. Collects OS, storage, memory, exposure, patching and account facts with a deterministic script, then produces an…",
       "path": "agents/system-sentinel",
       "manifest": "agents/system-sentinel/agent.yaml",
       "sha256": "9ad8957fdc0b2d43cf54d8c9f16c998a72436a1a2f0972a66c83ae8f3cab00a4"
@@ -31,10 +33,20 @@
       "type": "team",
       "version": "0.1.0",
       "maturity": "experimental",
-      "description": "Bring a personal workstation to a hardened, low-telemetry baseline: assess its security posture, audit and close its telemetry surfaces with the operator's per-surface approval, and deliver a single evidence-backed hardening report. The tea",
+      "description": "Bring a personal workstation to a hardened, low-telemetry baseline: assess its security posture, audit and close its telemetry surfaces with the operator's per-surface approval, and deliver a single…",
       "path": "agents/workstation-hardening-team",
       "manifest": "agents/workstation-hardening-team/team.yaml",
-      "sha256": "a7430a9d89ae55acbd5e2d08c0450a4607b822ebbc3098baab823b6d550f8076"
+      "sha256": "a7430a9d89ae55acbd5e2d08c0450a4607b822ebbc3098baab823b6d550f8076",
+      "requires": [
+        {
+          "name": "privacy-champion",
+          "type": "agent"
+        },
+        {
+          "name": "system-sentinel",
+          "type": "agent"
+        }
+      ]
     }
   ]
 }

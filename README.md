@@ -115,11 +115,24 @@ The agent follows its SOPs: collect evidence → propose → stop at approval ga
 ## Registry Index
 
 `tao.json` is a generated, flat index of the roster for consumers that want to
-list or fetch packages without walking the tree:
+list, fetch and pin packages without walking the tree. It records the
+`repository` and the `revision` it describes, so an entry is fetchable on its
+own:
+
+```
+fetch   = <repository>/archive/<revision>.tar.gz    # immutable, no auth, no git
+unpack  = that tarball's <path>
+verify  = tree hash of the package == entry.sha256
+```
 
 ```bash
-python3 scripts/build_index.py        # regenerate after adding a package
+python3 scripts/build_index.py            # regenerate after adding a package
+python3 scripts/build_index.py --check     # verify it is current
 ```
+
+Teams declare `requires` (their lead + members), so a consumer can install the
+closure. See [docs/package-spec.md §10](docs/package-spec.md) for the full
+contract — including why the hash covers *content*, not tarball bytes.
 
 ## Conformance
 

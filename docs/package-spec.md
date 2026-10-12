@@ -264,11 +264,14 @@ Semantic versioning (MAJOR.MINOR.PATCH):
 ## 10. Registry index (`tao.json`)
 
 `tao.json` is a generated, flat index of the roster, intended for consumers
-that want to list or fetch packages without walking the repository tree.
+that want to list, fetch and pin packages without walking the repository tree.
 
 ```json
 {
-  "schema": "tao/registry-index/1",
+  "schema": "tao/registry-index/2",
+  "repository": "https://github.com/<owner>/<repo>",
+  "revision": "<40-hex commit sha>",
+  "tag": "<release tag, if the revision is tagged>",
   "generated": "<iso8601>",
   "count": <int>,
   "agents": [
@@ -278,15 +281,57 @@ that want to list or fetch packages without walking the repository tree.
       "type": "agent | team",
       "version": "<semver>",
       "maturity": "<level>",
-      "description": "<one line>",
+      "description": "<one line, ≤200 chars, truncated on a word boundary>",
       "path": "agents/<name>",
-      "sha256": "<tree hash of the curated core>"
+      "manifest": "agents/<name>/agent.yaml | team.yaml",
+      "sha256": "<tree hash of the curated core>",
+      "requires": [{ "name": "<pkg>", "type": "agent | team" }]
     }
   ]
 }
 ```
 
-Generate it with `python3 scripts/build_index.py` (from the repository root).
+### 10.1 Resolution contract
+
+The index is the *discovery* half of distribution; the repository itself is the
+*acquisition* half. A consumer needs nothing else to fetch a package:
+
+```
+fetch   = <repository>/archive/<revision>.tar.gz      # immutable, no auth, no git
+unpack  = that tarball's <path> directory
+verify  = tree_hash(unpacked package) == entry.sha256
+```
+
+`revision` is the commit whose package contents the hashes describe. Publishing
+the index under a **tag** (e.g. `cdn.jsdelivr.net/gh/<owner>/<repo>@<tag>/tao.json`)
+makes discovery immutable too; an untagged `@main` fetch is the "latest" view.
+
+Because the hash covers *content*, not the tarball bytes, this survives GitHub
+regenerating archive tarballs. Consumers **must** verify, and must materialise
+only the hashed file set — never the extracted tree — so the excluded
+directories (`local/`, `backups/`) cannot smuggle unhashed files into an install.
+
+### 10.2 `requires`
+
+Teams reference other packages by name (`lead` + `members[].name`). The index
+declares them in `requires` so a consumer can install the closure — a team with
+no members installed is not a team. Standalone agents have no `requires`.
+
+### 10.3 Generating
+
+```bash
+python3 scripts/build_index.py            # write tao.json (revision = git HEAD)
+python3 scripts/build_index.py --check     # verify it is current
+```
+
+`--check` verifies that the package list and every `sha256` match the working
+tree, and that no package file has changed since the recorded `revision`. It
+deliberately does **not** require `revision == HEAD`: an index-only commit
+afterwards does not change package content, so it does not invalidate the pins.
+
 The index is committed so that consumers can pin to a known revision. The
 `sha256` is a deterministic hash over the package's curated files (excluding
-`local/`, `backups/` and log/state files).
+`local/`, `backups/`, `.git/`, `__pycache__/`, `.pytest_cache/` and log/state
+files). That hash is a **cross-implementation contract**: pi-hydra reimplements
+it and verifies before installing, so any change here must change both.
+

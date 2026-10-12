@@ -1,5 +1,30 @@
 # Changelog
 
+## [Unreleased] — Resolvable registry index
+
+### Added
+- **`tao.json` is now resolvable**: the index carries `repository` and
+  `revision`, so a consumer can fetch a pinned package with no other input.
+  Schema bumped to `tao/registry-index/2`.
+- **`requires`** on index entries: teams declare the lead + member packages a
+  consumer must install alongside them.
+- **`--revision` / `--repository` / `--tag`** flags on `scripts/build_index.py`
+  for environments without git.
+- **Index conformance checks** in `tests/validate_packages.py`, which re-derive
+the index's claims independently (revision format, count, package set,
+  per-entry fields, and that every team's `requires` covers its lead/members).
+
+### Changed
+- **`scripts/build_index.py` `--check`** now also verifies that no package file
+  has changed since the recorded `revision` (comparing against the working
+  tree, so uncommitted package edits count), instead of comparing `revision` to
+  `HEAD` — an index-only commit no longer invalidates the pins.
+- **Descriptions** in the index are truncated on a word boundary (they
+  previously cut mid-word, e.g. "…user appro").
+- **`docs/package-spec.md` §10** documents the resolution contract
+  (`archive/<revision>.tar.gz` + tree-hash verification), `requires`, and the
+  cross-implementation hash contract shared with pi-hydra.
+
 ## [Unreleased] — Repository revival
 
 ### Added

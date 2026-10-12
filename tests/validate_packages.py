@@ -14,11 +14,14 @@ Exit: 0 all good, 1 conformance errors found, 3 missing dependency.
 from __future__ import annotations
 
 import argparse
+import json
+import re
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 AGENTS_DIR = REPO_ROOT / "agents"
+INDEX_PATH = REPO_ROOT / "tao.json"
 
 REQUIRED_FILES = ["README.md", "SYSTEM.md", "CHANGELOG.md", "LICENSE"]
 REQUIRED_DIRS = ["sops", "tests", "onboarding", ".pi"]
@@ -99,6 +102,102 @@ def check_team(pkg: Path, body: dict, pkg_names: set):
         err(f"{pkg.name}: team manifest has no result_contract")
 
 
+def _tree_hash():
+    """Import the canonical tree-hash implementation from scripts/build_index.py.
+
+    The point of re-checking here is to catch a *stale or hand-edited index*,
+    not to be a second implementation of an algorithm that pi-hydra also
+    reimplements — that cross-implementation contract is tested in pi-hydra.
+    """
+    try:
+        sys.path.insert(0, str(REPO_ROOT / "scripts"))
+        import build_index  # type: ignore
+
+        return build_index.tree_hash
+    except Exception as e:  # noqa: BLE001
+        warn(f"could not import scripts/build_index.py to verify hashes: {e}")
+        return None
+
+
+def check_index(pkg_names: set):
+    """Independently re-derive the index's claims (a hand-edited index is a bug)."""
+    if not INDEX_PATH.is_file():
+        err("tao.json missing — run: python3 scripts/build_index.py")
+        return
+    try:
+        idx = json.loads(INDEX_PATH.read_text(encoding="utf-8"))
+    except Exception as e:  # noqa: BLE001
+        err(f"tao.json is not valid JSON: {e}")
+        return
+    if not isinstance(idx, dict):
+        err("tao.json is not a mapping")
+        return
+
+    schema = str(idx.get("schema") or "")
+    if not schema.startswith("tao/registry-index/"):
+        err(f"tao.json: unexpected schema '{schema}'")
+    if not re.fullmatch(r"[0-9a-f]{40}", str(idx.get("revision") or "")):
+        err("tao.json: 'revision' must be a 40-hex commit SHA (for resolvable pins)")
+    if not idx.get("repository"):
+        warn("tao.json: no 'repository' — entries cannot be fetched")
+
+    entries = idx.get("agents") or []
+    if not isinstance(entries, list):
+        err("tao.json: 'agents' is not a list")
+        return
+    if idx.get("count") != len(entries):
+        err(f"tao.json: count ({idx.get('count')}) != entries ({len(entries)})")
+
+    names = {e.get("name") for e in entries if isinstance(e, dict)}
+    for missing in sorted(pkg_names - names):
+        err(f"tao.json: package '{missing}' is missing from the index")
+    for extra in sorted(names - pkg_names):
+        err(f"tao.json: entry '{extra}' has no package under agents/")
+
+    for e in entries:
+        if not isinstance(e, dict):
+            continue
+        name = e.get("name")
+        for field in ("title", "type", "version", "maturity", "description", "path", "sha256"):
+            if not e.get(field):
+                err(f"tao.json: entry '{name}' missing '{field}'")
+        if not re.fullmatch(r"[0-9a-f]{64}", str(e.get("sha256") or "")):
+            err(f"tao.json: entry '{name}' has a malformed sha256")
+        elif (hashfn := _tree_hash()) and (REPO_ROOT / str(e.get("path") or "")).is_dir():
+            actual = hashfn(REPO_ROOT / e["path"])
+            if actual != e["sha256"]:
+                err(f"tao.json: entry '{name}' sha256 is stale "
+                    f"(index {e['sha256'][:12]}…, tree {actual[:12]}…)")
+        if e.get("path") and not (REPO_ROOT / e["path"]).is_dir():
+            err(f"tao.json: entry '{name}' path does not exist: {e['path']}")
+        if e.get("description", "").endswith("…") and len(e["description"]) > 200:
+            err(f"tao.json: entry '{name}' description exceeds the 200-char limit")
+
+    # Teams must declare the cross-package references a consumer has to install.
+    for e in entries:
+        if not isinstance(e, dict) or e.get("type") != "team":
+            continue
+        pkg = REPO_ROOT / str(e.get("path") or "")
+        manifest = pkg / "team.yaml"
+        if not manifest.is_file():
+            continue
+        body = (load_yaml(manifest) or {}).get("team") or {}
+        expected = set()
+        if body.get("lead"):
+            expected.add(body["lead"])
+        for m in body.get("members") or []:
+            if isinstance(m, dict) and m.get("name"):
+                expected.add(m["name"])
+            elif isinstance(m, str):
+                expected.add(m)
+        expected.discard(e.get("name"))
+        declared = {r.get("name") for r in (e.get("requires") or []) if isinstance(r, dict)}
+        for missing in sorted(expected - declared):
+            err(f"tao.json: team '{e.get('name')}' does not declare requires['{missing}']")
+        for extra in sorted(declared - expected):
+            err(f"tao.json: team '{e.get('name')}' declares unknown requires '{extra}'")
+
+
 def validate_package(pkg: Path, pkg_names: set):
     manifest_name = None
     for name in ("agent.yaml", "team.yaml"):
@@ -169,6 +268,8 @@ def main():
 
     for name in sorted(names):
         validate_package(AGENTS_DIR / name, names)
+
+    check_index(names)
 
     if not args.quiet:
         print(f"Validated {len(names)} package(s): {', '.join(sorted(names))}")
