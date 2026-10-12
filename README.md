@@ -28,6 +28,21 @@ Each agent and team ships as a versioned package with SYSTEM.md, agent.yaml/team
 
 The invariant: local adaptation may tighten authority or replace environment bindings, but must never silently weaken safety constraints or verification requirements.
 
+## Repository Layout
+
+```
+tao-agents/
+├── agents/                    # one directory per package
+│   ├── privacy-champion/      # standalone agent
+│   ├── system-sentinel/       # standalone agent
+│   └── workstation-hardening-team/  # example team (non-deploying)
+├── docs/package-spec.md       # the TAO package specification
+├── scripts/                   # shared tooling (taskrail CLI, index builder)
+├── taskrails/                 # repository-level taskrails
+├── tests/                     # repository conformance tests
+└── tao.json                   # generated registry index
+```
+
 ## Package Structure
 
 ```
@@ -39,9 +54,10 @@ agent-name/
 ├── LICENSE
 ├── sops/                     # Standard operating procedures
 ├── scripts/                  # Deterministic tooling
-├── tests/                    # Boundary, authority, and scenario tests
-├── onboarding/               # Induction interview and readiness checks
-└── .pi/
+├── tests/                    # Boundary, authority, evidence, scenario tests
+├── taskrails/                # Operating-loop workflows
+├── onboarding/               # Induction workflow and readiness checks
+└── .pi/                      # Host integration surface
     ├── skills/
     ├── prompts/
     ├── workflows/
@@ -60,8 +76,11 @@ local/                        # Generated during induction (gitignored)
 
 ```bash
 git clone https://github.com/richarddun/tao-agents.git
-cd tao-agents/agents/<agent-name>
-pi run induct
+cd tao-agents
+
+# Induct the agent (one-time; adapts it to your machine)
+scripts/taskrail start --name induction \
+    --taskrails-dir agents/privacy-champion/onboarding
 ```
 
 The induction workflow interviews you about your environment, observes what it can safely inspect, proposes bindings, and generates `local/` — without touching the curated core.
@@ -69,19 +88,47 @@ The induction workflow interviews you about your environment, observes what it c
 ### Run a task
 
 ```bash
-pi run task "Review the CloudFormation stack in us-east-1"
+# Drive the agent's operating loop
+scripts/taskrail start --name privacy-audit \
+    --taskrails-dir agents/privacy-champion/taskrails
 ```
 
-The agent will follow its SOPs: collect evidence → propose → stop at approval gates → execute through bounded wrappers → verify → report.
+The agent follows its SOPs: collect evidence → propose → stop at approval gates → execute through bounded wrappers → verify → report.
+
+> In a host that supports named taskrails natively (e.g. a Pi Coding Agent head
+> pointed at a package directory), you can start these rails directly. The
+> `scripts/taskrail` CLI is the zero-dependency reference runner.
 
 ## Available Agents
 
 | Agent | Type | Maturity | Description |
 |-------|------|----------|-------------|
 | [**Privacy Champion**](agents/privacy-champion/) | Standalone | Experimental | Audit and harden telemetry surfaces across OS, browsers, and network. 8-step guided audit with per-surface approval gates. |
-| *(more coming soon)* | | | |
+| [**System Sentinel**](agents/system-sentinel/) | Standalone | Experimental | Read-only inventory and posture assessment of a workstation: storage, memory, exposure, patching, accounts. |
 
-Team packages (lead specialist + bounded member agents with explicit handoff contracts) will appear alongside standalone agents.
+## Teams
+
+| Team | Type | Maturity | Description |
+|------|------|----------|-------------|
+| [**Workstation Hardening Team**](agents/workstation-hardening-team/) | Team (non-deploying example) | Experimental | Composes System Sentinel (lead) with Privacy Champion (telemetry) around one objective: harden a workstation and produce a single evidence-backed report. |
+
+## Registry Index
+
+`tao.json` is a generated, flat index of the roster for consumers that want to
+list or fetch packages without walking the tree:
+
+```bash
+python3 scripts/build_index.py        # regenerate after adding a package
+```
+
+## Conformance
+
+Repository-wide checks validate package layout, manifests, cross-package
+references (team members/leads) and index freshness:
+
+```bash
+bash tests/run_all.sh
+```
 
 ## Philosophy
 
@@ -94,7 +141,14 @@ Team packages (lead specialist + bounded member agents with explicit handoff con
 
 ## Contributing
 
-Agent and team packages follow the [TAO Package Specification](docs/package-spec.md). Proposals, field reports, and new agent submissions are welcome.
+Agent and team packages follow the [TAO Package Specification](docs/package-spec.md). The
+repository-level [`new-agent-checklist`](taskrails/new-agent-checklist.taskrail.json)
+taskrail walks through authoring a conformant package end to end. Proposals,
+field reports, and new agent submissions are welcome.
+
+```bash
+scripts/taskrail start --name new-agent-checklist
+```
 
 ## License
 

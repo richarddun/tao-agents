@@ -16,7 +16,7 @@ vendors a reference CLI at `scripts/taskrail`, which can be pointed at a
 package's rails with `--taskrails-dir`:
 
 ```bash
-bash scripts/taskrail list --taskrails-dir agents/privacy-champion/taskrails
-bash scripts/taskrail start --name privacy-audit --taskrails-dir agents/privacy-champion/taskrails
-bash scripts/taskrail start --name induction --taskrails-dir agents/privacy-champion/onboarding
+scripts/taskrail list --taskrails-dir agents/privacy-champion/taskrails
+scripts/taskrail start --name privacy-audit --taskrails-dir agents/privacy-champion/taskrails
+scripts/taskrail start --name induction --taskrails-dir agents/privacy-champion/onboarding
 ```

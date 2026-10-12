@@ -26,7 +26,7 @@ Drive the audit through the taskrail — one task at a time, never pre-completin
 
 ```bash
 # From the repository root, pointing the vendored runner at this package:
-bash scripts/taskrail start --name privacy-audit \
+scripts/taskrail start --name privacy-audit \
     --taskrails-dir agents/privacy-champion/taskrails
 ```
 

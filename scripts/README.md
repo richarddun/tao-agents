@@ -15,16 +15,16 @@ embedded constraints and validation gates, never seeing the full plan upfront.
 ./scripts/taskrail list
 
 # Inspect a taskrail
-./scripts/taskrail info sysadmin-health-check
+./scripts/taskrail info new-agent-checklist
 
 # Run through a taskrail (agent drives this)
-./scripts/taskrail start --name sysadmin-health-check
+./scripts/taskrail start --name new-agent-checklist
 # ... agent completes task, validates, then:
 ./scripts/taskrail next
 # ... repeat until "All tasks complete"
 
 # Resume after interruption (fingerprint-matched to the right session)
-./scripts/taskrail resume --name sysadmin-health-check
+./scripts/taskrail resume --name new-agent-checklist
 ```
 
 ### Subcommands
@@ -94,6 +94,21 @@ TAO agents use taskrails for:
 - **Operating loop**: An agent's core decision loop is its self-taskrail
 - **Team orchestration**: The primary specialist sequences member agents via taskrails
 
-Agents invoke the CLI via shell (e.g., `bash scripts/taskrail next`). The
-progressive-disclosure design prevents pre-completion and keeps agent context
-fresh — the agent only ever sees one task at a time.
+Agents invoke the CLI directly (it is a `#!/usr/bin/env python3` script), e.g.
+`scripts/taskrail next`. The progressive-disclosure design prevents
+pre-completion and keeps agent context fresh — the agent only ever sees one
+task at a time.
+
+## `build_index.py`
+
+Generates the committed registry index (`tao.json`) from the packages under
+`agents/`. See `docs/package-spec.md` §10.
+
+```bash
+python3 scripts/build_index.py            # write tao.json
+python3 scripts/build_index.py --check     # verify tao.json is current
+python3 scripts/build_index.py --json      # print the index
+```
+
+Requires PyYAML (`pip install pyyaml`). It is also invoked by the repository
+conformance suite (`tests/run_all.sh`) to keep the index fresh.

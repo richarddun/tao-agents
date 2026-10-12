@@ -31,7 +31,7 @@ is immutable per the TAO two-layer portability model.
 
 ```bash
 # From the repository root, using the vendored reference runner:
-bash scripts/taskrail start --name induction \
+scripts/taskrail start --name induction \
     --taskrails-dir agents/privacy-champion/onboarding
 ```
 

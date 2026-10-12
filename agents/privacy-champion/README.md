@@ -23,11 +23,11 @@ git clone https://github.com/richarddun/tao-agents.git
 cd tao-agents
 
 # 2. Run induction (one-time setup — adapts to your machine)
-bash scripts/taskrail start --name induction \
+scripts/taskrail start --name induction \
     --taskrails-dir agents/privacy-champion/onboarding
 
 # 3. Run the audit
-bash scripts/taskrail start --name privacy-audit \
+scripts/taskrail start --name privacy-audit \
     --taskrails-dir agents/privacy-champion/taskrails
 ```
 

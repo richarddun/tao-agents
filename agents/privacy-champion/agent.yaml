@@ -4,6 +4,7 @@
 
 agent:
   name: privacy-champion
+  title: Privacy Champion
   slug: privacy-champion
   version: 0.1.0
   maturity: experimental
