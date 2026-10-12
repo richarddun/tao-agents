@@ -1,0 +1,40 @@
+{
+  "schema": "tao/registry-index/1",
+  "generated": "2026-10-12T21:00:12Z",
+  "count": 3,
+  "agents": [
+    {
+      "name": "privacy-champion",
+      "title": "Privacy Champion",
+      "type": "agent",
+      "version": "0.1.0",
+      "maturity": "experimental",
+      "description": "Audit and harden privacy surfaces on a personal computer. Fingerprint the operating system and installed browsers, enumerate known telemetry and data-exfiltration channels, probe current state, classify risk, present findings for user appro",
+      "path": "agents/privacy-champion",
+      "manifest": "agents/privacy-champion/agent.yaml",
+      "sha256": "c85ff2efb58d047574918834ee30eb153c351cfb2ca135b1b48de5578496e11a"
+    },
+    {
+      "name": "system-sentinel",
+      "title": "System Sentinel",
+      "type": "agent",
+      "version": "0.1.0",
+      "maturity": "experimental",
+      "description": "Inventory and assess the security posture of a personal workstation, read-only. Collects OS, storage, memory, exposure, patching and account facts with a deterministic script, then produces an evidence-backed posture report with per-area ri",
+      "path": "agents/system-sentinel",
+      "manifest": "agents/system-sentinel/agent.yaml",
+      "sha256": "9ad8957fdc0b2d43cf54d8c9f16c998a72436a1a2f0972a66c83ae8f3cab00a4"
+    },
+    {
+      "name": "workstation-hardening-team",
+      "title": "Workstation Hardening Team",
+      "type": "team",
+      "version": "0.1.0",
+      "maturity": "experimental",
+      "description": "Bring a personal workstation to a hardened, low-telemetry baseline: assess its security posture, audit and close its telemetry surfaces with the operator's per-surface approval, and deliver a single evidence-backed hardening report. The tea",
+      "path": "agents/workstation-hardening-team",
+      "manifest": "agents/workstation-hardening-team/team.yaml",
+      "sha256": "a7430a9d89ae55acbd5e2d08c0450a4607b822ebbc3098baab823b6d550f8076"
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+# Workstation Hardening Team — Team Manifest
+# TAO package specification v0.1
+# Non-deploying example team: a reviewable composition of two real agents.
+
+team:
+  name: workstation-hardening-team
+  title: Workstation Hardening Team
+  slug: workstation-hardening-team
+  version: 0.1.0
+  maturity: experimental
+  type: team
+
+  objective: >
+    Bring a personal workstation to a hardened, low-telemetry baseline: assess
+    its security posture, audit and close its telemetry surfaces with the
+    operator's per-surface approval, and deliver a single evidence-backed
+    hardening report. The team does not invent authority: every mutation is
+    gated by the operator, exactly as it is for the member agents alone.
+
+  lead: system-sentinel
+
+  members:
+    - name: system-sentinel
+      role: Lead — intake, posture assessment, plan synthesis and final report
+      triggers: [always, objective_intake, synthesis, final_verification]
+      authority_ceiling: read + propose
+      inputs: [host shell access]
+      outputs: [posture report, combined plan, hardening report]
+
+    - name: privacy-champion
+      role: Telemetry auditor and closure operator
+      triggers: [telemetry_scope_in_objective, posture_findings]
+      authority_ceiling: read + propose; mutate only with per-surface operator approval
+      inputs: [posture report, operator approval]
+      outputs: [privacy audit report, change log, verification report]
+
+  orchestration:
+    workflow: taskrails/hardening-baseline.taskrail.json
+    shared_state: schemas/team-state.json
+    budgets:
+      max_agents: 3
+      max_parallel: 1
+      max_iterations: 2
+    failure_policy: halt_before_mutation_if_required_member_fails
+
+  authority:
+    aggregate: least_privilege_intersection
+    read: automatic
+    propose: automatic
+    mutate: target_specific_explicit_approval
+    destructive: prohibited_by_default
+
+  result_contract: schemas/hardening-report.json
+
+  # ── Composition rules ──────────────────────────────────────────────
+  composition_rationale: >
+    The objective needs two distinct competencies: a read-only posture
+    assessor and a telemetry auditor with a gated closure capability. One
+    agent could not do both honestly, because the assessor must remain
+    incapable of mutation while the auditor must be able to mutate with
+    approval. Keeping them separate preserves that boundary and gives the
+    operator independent visibility into each step.
+
+  degradation:
+    if_privacy_champion_unavailable: >
+      Assessment still completes; telemetry closures are skipped and the
+      report is marked DEGRADED. No mutation is attempted without the
+      member whose authority covers it.
+
+  # ── Lifecycle ──────────────────────────────────────────────────────
+  lifecycle:
+    install: Clone the TAO repository; both member packages ship in-repo
+    induct: Run each member's induction (agents/*/onboarding/induction.taskrail.json)
+    validate: tests/run_all.sh
+    upgrade: Pull new member versions; re-run induction; re-validate this manifest
+    rollback: Member-level rollback per each member's doctrine
+    uninstall: No team-specific state; delete member local/ directories
+
+  # ── Provenance ─────────────────────────────────────────────────────
+  maintainer: Richard Dunne
+  license: MIT
+  repository: https://github.com/richarddun/tao-agents/tree/main/agents/workstation-hardening-team
+  feedback: Structured field reports via repository issues

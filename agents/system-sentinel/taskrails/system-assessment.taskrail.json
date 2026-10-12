@@ -1,0 +1,73 @@
+{
+  "title": "System Assessment",
+  "description": "Read-only assessment of a workstation's security posture: inventory, disk, memory, services and exposure, patching and encryption. Produces an evidence-backed posture report. Makes no changes.",
+  "rail": [
+    {
+      "task_id": 1,
+      "task_name": "inventory_system",
+      "constraints": [
+        "- You MUST run scripts/inventory.sh and capture its JSON output",
+        "- You MUST report the OS family, version, kernel, privilege level and hostname",
+        "- You MUST NOT modify the system — this taskrail is read-only from end to end",
+        "- You MUST flag any field the inventory returned as 'unknown' and why"
+      ],
+      "validation": "Report the OS, kernel, privilege level and any fields the inventory could not determine."
+    },
+    {
+      "task_id": 2,
+      "task_name": "assess_storage",
+      "constraints": [
+        "- You MUST inspect the disk usage figures from the inventory",
+        "- You MUST flag any filesystem above 85% usage as a risk",
+        "- You MUST note whether disk encryption was detected (luks-present / none-detected / unknown)",
+        "- You SHOULD recommend free-space thresholds appropriate to the workload"
+      ],
+      "validation": "Report per-filesystem usage, flag anything above 85%, and state the encryption status."
+    },
+    {
+      "task_id": 3,
+      "task_name": "assess_memory_and_load",
+      "constraints": [
+        "- You MUST inspect memory, swap and load-average figures from the inventory",
+        "- You MUST flag swap usage above 50% as a risk",
+        "- You MUST compare the 1-minute load average against the CPU count and flag sustained saturation",
+        "- You SHOULD distinguish steady-state pressure from a transient spike"
+      ],
+      "validation": "Report memory, swap and load with an explicit risk verdict for each."
+    },
+    {
+      "task_id": 4,
+      "task_name": "assess_exposure",
+      "constraints": [
+        "- You MUST list the listening sockets from the inventory, grouped by interface (loopback vs all-interfaces)",
+        "- You MUST flag every service listening on an all-interfaces address as externally reachable",
+        "- You MUST report the firewall status and warn if it is inactive or unknown",
+        "- You SHOULD identify any listening service that is unexpected for a workstation"
+      ],
+      "validation": "Report the externally-reachable listeners, firewall status, and any surprising service."
+    },
+    {
+      "task_id": 5,
+      "task_name": "assess_patching",
+      "constraints": [
+        "- You MUST report the pending-update count from the inventory",
+        "- You MUST flag pending updates as a risk, noting that no severity is available from the count alone",
+        "- You MUST NOT install updates — recommending is the limit of this agent's authority",
+        "- You SHOULD suggest a maintenance window rather than immediate action"
+      ],
+      "validation": "Report the pending-update count and a patching recommendation without taking action."
+    },
+    {
+      "task_id": 6,
+      "task_name": "summarise_posture",
+      "constraints": [
+        "- You MUST compile the findings into a concise posture summary with a risk rating per area",
+        "- You MUST separate findings by severity and mark anything needing human attention",
+        "- You MUST provide the exact remediation for each finding, marked as a recommendation only",
+        "- You MUST NOT claim any change was made — none are made by this agent",
+        "- You MAY produce the summary as JSON conforming to schemas/posture-report.json"
+      ],
+      "validation": "Provide a final posture summary with per-area risk ratings and clearly-marked recommendations."
+    }
+  ]
+}

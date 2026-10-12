@@ -1,0 +1,79 @@
+{
+  "title": "New Agent Checklist",
+  "description": "Repository-level checklist for authoring a conformant TAO package. Follows docs/package-spec.md and ends by running the conformance tests and regenerating the registry index.",
+  "rail": [
+    {
+      "task_id": 1,
+      "task_name": "read_the_spec",
+      "constraints": [
+        "- You MUST read docs/package-spec.md in full before creating anything",
+        "- You MUST identify the required files and directories for a package (section 2)",
+        "- You SHOULD copy the structure of an existing package such as agents/system-sentinel/"
+      ],
+      "validation": "List the required files and directories you will create, and confirm the package type (agent or team)."
+    },
+    {
+      "task_id": 2,
+      "task_name": "author_the_manifest",
+      "constraints": [
+        "- You MUST create agents/<name>/agent.yaml (or team.yaml for a team) with a single top-level key",
+        "- You MUST include the identity, authority, inputs/outputs, state, operating model, recovery, local_adapter, compatibility, lifecycle and telemetry sections",
+        "- You MUST verify the file parses as YAML, e.g. `python3 -c \"import yaml,sys; yaml.safe_load(open(sys.argv[1]))\" agents/<name>/agent.yaml`",
+        "- For a team, you MUST declare objective, lead, members, orchestration (workflow, shared_state, budgets, failure_policy) and result_contract"
+      ],
+      "validation": "Report that the manifest parses as YAML and that every required field is present."
+    },
+    {
+      "task_id": 3,
+      "task_name": "author_the_doctrine",
+      "constraints": [
+        "- You MUST write SYSTEM.md: identity, mission, scope, non-negotiable boundaries and failure modes",
+        "- You MUST reference SOPs and the operating loop rather than duplicating procedures inline",
+        "- You MUST keep it loadable as a system prompt without excessive token cost"
+      ],
+      "validation": "Summarise the authority boundaries declared in SYSTEM.md and confirm they match the manifest."
+    },
+    {
+      "task_id": 4,
+      "task_name": "author_the_workflow",
+      "constraints": [
+        "- You MUST create the operating-loop taskrail at taskrails/<name>.taskrail.json",
+        "- Each task MUST carry constraints (MUST/SHOULD/MAY) and a validation gate",
+        "- You MUST create an induction taskrail at onboarding/induction.taskrail.json",
+        "- You MUST document the methodology in sops/"
+      ],
+      "validation": "Confirm both taskrails parse as JSON and that every task has constraints and a validation string."
+    },
+    {
+      "task_id": 5,
+      "task_name": "author_the_scripts",
+      "constraints": [
+        "- You MUST make every script deterministic and read-only unless the package declares mutation authority",
+        "- Any mutating script MUST default to dry-run and enforce an explicit approval gate",
+        "- Scripts MUST emit machine-readable (JSON) output and fail loudly",
+        "- Scripts MUST NOT select accounts, targets or regions implicitly"
+      ],
+      "validation": "Report the scripts you added and, for any mutating script, the exact approval gate it enforces."
+    },
+    {
+      "task_id": 6,
+      "task_name": "author_the_tests",
+      "constraints": [
+        "- You MUST provide tests/run_all.sh",
+        "- You MUST cover boundary, authority, evidence and failure behaviour (and team handoffs for a team)",
+        "- You MUST ensure the suite exits non-zero on failure"
+      ],
+      "validation": "Run the suite and report that it passes. Paste the summary line."
+    },
+    {
+      "task_id": 7,
+      "task_name": "validate_and_index",
+      "constraints": [
+        "- You MUST run the repository conformance tests: `python3 tests/validate_packages.py`",
+        "- You MUST regenerate the registry index: `python3 scripts/build_index.py`",
+        "- You SHOULD run the full repository suite: `bash tests/run_all.sh`"
+      ],
+      "validation": "Report zero conformance errors and that tao.json now lists the new package."
+    }
+  ]
+}

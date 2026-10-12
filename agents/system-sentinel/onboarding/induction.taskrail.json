@@ -1,0 +1,56 @@
+{
+  "title": "System Sentinel — Induction",
+  "description": "One-time induction that adapts the System Sentinel to the user's machine: verifies the platform and tools, runs a read-only inventory, sets warning thresholds, writes the local adaptation layer, and confirms readiness.",
+  "rail": [
+    {
+      "task_id": 1,
+      "task_name": "verify_platform",
+      "constraints": [
+        "- You MUST run scripts/inventory.sh and confirm the detected OS family is linux or macos",
+        "- You MUST report the privilege level, since it determines which fields will be collectable",
+        "- You MUST NOT proceed silently if the platform is unsupported — say so and stop"
+      ],
+      "validation": "Report the detected OS family, version and privilege level, and confirm support."
+    },
+    {
+      "task_id": 2,
+      "task_name": "check_dependencies",
+      "constraints": [
+        "- You MUST verify bash and python3 are available",
+        "- You MUST verify the coreutils used by the inventory are present (df, uptime, uname)",
+        "- You MUST NOT install anything without user confirmation"
+      ],
+      "validation": "Report which required tools are present and which are missing, with install commands for the detected package manager."
+    },
+    {
+      "task_id": 3,
+      "task_name": "set_thresholds",
+      "constraints": [
+        "- You MUST present the default warning thresholds from sops/system-assessment.sop.md",
+        "- You SHOULD ask whether the user wants to tighten any threshold",
+        "- You MUST record the chosen thresholds in the local adaptation layer"
+      ],
+      "validation": "Confirm the thresholds to be used for this machine."
+    },
+    {
+      "task_id": 4,
+      "task_name": "write_local_config",
+      "constraints": [
+        "- You MUST create local/environment.yaml with detected OS, privilege level, report format preference and thresholds",
+        "- You MUST NOT include credentials or secrets",
+        "- You MUST NOT modify any curated-core file (scripts/, taskrails/, sops/, schemas/, SYSTEM.md, agent.yaml)"
+      ],
+      "validation": "Confirm local/environment.yaml was created and that no curated file changed."
+    },
+    {
+      "task_id": 5,
+      "task_name": "run_readiness_and_complete",
+      "constraints": [
+        "- You MUST run tests/readiness-check.sh and report PASS/PARTIAL/FAIL",
+        "- You MUST tell the user the command to start an assessment: the 'system-assessment' taskrail",
+        "- You MUST NOT start an assessment automatically"
+      ],
+      "validation": "Confirm readiness status and hand off to the system-assessment taskrail."
+    }
+  ]
+}

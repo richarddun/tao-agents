@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Workstation hardening report",
+  "description": "Result contract for the workstation-hardening-team. A single evidence-backed deliverable synthesised by the lead from both members' outputs.",
+  "type": "object",
+  "required": ["generated", "objective", "target", "members", "posture", "applied_changes", "verification", "unresolved_risks", "next_steps", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "generated": { "type": "string", "format": "date-time" },
+    "objective": { "type": "string" },
+    "target": { "type": "string", "description": "The machine the objective was pursued against." },
+    "status": {
+      "type": "string",
+      "enum": ["COMPLETE", "PARTIAL", "DEGRADED", "HALTED"],
+      "description": "COMPLETE only when every required member succeeded and verification passed."
+    },
+    "members": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status"],
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "type": "string", "enum": ["succeeded", "failed", "skipped"] },
+          "authority_used": { "type": "string" }
+        }
+      }
+    },
+    "posture": {
+      "type": "object",
+      "description": "The lead's posture assessment (see system-sentinel schemas/posture-report.json).",
+      "additionalProperties": true
+    },
+    "applied_changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["surface_id", "member", "operator_approved"],
+        "properties": {
+          "surface_id": { "type": "string" },
+          "member": { "type": "string" },
+          "operator_approved": { "type": "boolean" },
+          "before_state": { "type": "string" },
+          "after_state": { "type": "string" }
+        }
+      }
+    },
+    "verification": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["surface_id", "verified"],
+        "properties": {
+          "surface_id": { "type": "string" },
+          "verified": { "type": "boolean" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "unresolved_risks": {
+      "type": "array",
+      "description": "Risks and dissent preserved from the members rather than averaged away.",
+      "items": { "type": "string" }
+    },
+    "next_steps": {
+      "type": "array",
+      "description": "Operator-owned actions recommended by the team.",
+      "items": {
+        "type": "object",
+        "required": ["action", "owner"],
+        "properties": {
+          "action": { "type": "string" },
+          "owner": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,146 @@
+# System Sentinel — Agent Manifest
+# TAO package specification v0.1
+
+agent:
+  name: system-sentinel
+  title: System Sentinel
+  slug: system-sentinel
+  version: 0.1.0
+  maturity: experimental
+  type: agent
+
+  purpose: >
+    Inventory and assess the security posture of a personal workstation,
+    read-only. Collects OS, storage, memory, exposure, patching and account
+    facts with a deterministic script, then produces an evidence-backed
+    posture report with per-area risk ratings and recommendations. Makes no
+    changes to the system.
+
+  good_fit:
+    - First look at an unfamiliar machine
+    - Periodic posture review of a workstation
+    - Pre-handover or pre-travel equipment check
+    - Sanity check after a system upgrade or migration
+    - A second opinion before accepting a machine into a trust boundary
+
+  poor_fit:
+    - Servers and production hosts (different posture, different tooling)
+    - Remediation work — this agent recommends, it does not change
+    - Application or code security review
+    - Compliance certification (the assessment is not an audit opinion)
+
+  # ── Authority ──────────────────────────────────────────────────────
+  authority:
+    read: automatic
+    propose: automatic
+    mutate_system: prohibited_by_default
+    destructive: prohibited_by_default
+    escalation: report_recommendation
+
+  authority_rationale: >
+    This agent has no mutation capability. Its single script performs read-only
+    collection and reports unknown rather than escalating privileges. All
+    findings are recommendations for the operator to act on. There is therefore
+    no approval gate to enforce: there is nothing to approve.
+
+  # ── Inputs / Outputs ───────────────────────────────────────────────
+  inputs:
+    - shell_access: Required to run the read-only inventory script
+    - process_privilege: Standard user; some fields report unknown without admin
+
+  outputs:
+    - posture_report: Per-area risk ratings with cited evidence fields
+    - recommendation_list: Concrete, operator-owned next steps
+    - raw_inventory: The collected inventory JSON
+
+  # ── State & Memory ─────────────────────────────────────────────────
+  state:
+    fields:
+      - assessment_timestamp: When the assessment ran
+      - inventory_snapshot: The collected facts, for drift comparison
+      - findings: Rated findings with their evidence
+      - recommendations: Suggested actions (operator-owned)
+    retention: Local file in the workspace (local/); the user controls deletion
+    sharing: Never transmitted; the agent does not phone home
+
+  # ── Operating Model ────────────────────────────────────────────────
+  operating_loop: taskrails/system-assessment.taskrail.json
+  core_sop: sops/system-assessment.sop.md
+  taskrails:
+    - taskrails/system-assessment.taskrail.json
+    - onboarding/induction.taskrail.json
+  scripts:
+    - scripts/inventory.sh           # read-only posture inventory
+  tests:
+    - tests/readiness-check.sh
+    - tests/run_all.sh
+  knowledge_base:
+    - schemas/posture-report.json    # result contract
+
+  # ── Recovery ───────────────────────────────────────────────────────
+  recovery:
+    - halt: Report the failure; a failed collection is not a finding
+    - unknown: Record uncollected fields as unknown with the reason
+    - escalate: Never escalate privileges to collect data
+    - resume: Taskrail state file enables resume after interruption
+
+  # ── Local Adaptation ───────────────────────────────────────────────
+  local_adapter:
+    format: generated YAML
+    path: local/environment.yaml
+    generated_by: onboarding/induction.taskrail.json
+    gitignored: true
+    contents:
+      - detected_os: Auto-populated by inventory
+      - privilege_level: Auto-populated by inventory
+      - report_format: text, markdown, or json
+      - thresholds: Usage/swap/load warning thresholds
+
+  # ── Compatibility ──────────────────────────────────────────────────
+  compatibility:
+    platforms:
+      - os: Linux
+        distributions: ["Ubuntu 22.04+", "Debian 12+", "Fedora 39+"]
+      - os: macOS
+        versions: ["13 (Ventura)", "14 (Sonoma)", "15 (Sequoia)"]
+    runtimes:
+      - Pi Coding Agent (pi.dev)
+      - Claude Code (Anthropic)
+      - Codex (OpenAI)
+      - Any platform supporting skills + shell execution
+    minimum_privileges: Standard user (some fields report unknown without admin)
+    dependencies:
+      - bash 4.0+
+      - python3 (JSON assembly)
+      - Coreutils (df, uptime, uname)
+
+  # ── Lifecycle ──────────────────────────────────────────────────────
+  lifecycle:
+    install: Clone the TAO repository and cd agents/system-sentinel
+    induct: onboarding/induction.taskrail.json
+    validate: tests/readiness-check.sh
+    test: tests/run_all.sh
+    upgrade: Pull the new package version; re-run induction to merge local changes
+    rollback: Not applicable — the agent makes no changes
+    uninstall: Delete the local/ directory; no system residue
+
+  # ── Telemetry (of the agent itself) ────────────────────────────────
+  telemetry:
+    opt_in_only: true
+    collected_when_enabled:
+      - agent_version
+      - platform_family (OS family only, no hardware IDs)
+      - findings_count_by_severity
+      - unknown_field_count
+    never_collected:
+      - Hardware identifiers
+      - IP addresses
+      - User account names
+      - File paths outside the assessment workspace
+      - Any content of user files
+
+  # ── Maintainer ─────────────────────────────────────────────────────
+  maintainer: Richard Dunne
+  license: MIT
+  repository: https://github.com/richarddun/tao-agents/tree/main/agents/system-sentinel
+  feedback: Structured field reports via repository issues

@@ -1,0 +1,78 @@
+{
+  "title": "Workstation Hardening Baseline",
+  "description": "Team workflow: assess a workstation's posture, audit telemetry surfaces, present one combined approval gate, apply only operator-approved closures, then verify and synthesise a single hardening report. The lead (system-sentinel) owns every gate and the final result; privacy-champion performs telemetry work under its own per-surface approval contract.",
+  "rail": [
+    {
+      "task_id": 1,
+      "task_name": "intake_objective",
+      "owner": "system-sentinel",
+      "constraints": [
+        "- The lead MUST restate the objective, the target machine, and the team's aggregate authority",
+        "- The lead MUST confirm that no mutation will occur without per-surface operator approval",
+        "- The lead MUST record which members are available before proceeding"
+      ],
+      "validation": "Report the objective, target, aggregate authority and member availability. If privacy-champion is unavailable, state that the run will be DEGRADED."
+    },
+    {
+      "task_id": 2,
+      "task_name": "assess_posture",
+      "owner": "system-sentinel",
+      "constraints": [
+        "- The member MUST run its read-only system assessment and return the posture report",
+        "- The member MUST NOT mutate anything",
+        "- The member MUST pass its findings to the lead for synthesis",
+        "- The lead MUST NOT begin telemetry work until the posture report is complete"
+      ],
+      "validation": "Report the posture summary and any HIGH findings. Confirm that nothing was changed."
+    },
+    {
+      "task_id": 3,
+      "task_name": "audit_telemetry",
+      "owner": "privacy-champion",
+      "constraints": [
+        "- The member MUST run its privacy audit taskrail through the classify step",
+        "- The member MUST STOP at its approval gate and return the tiered plan — it MUST NOT apply anything yet",
+        "- The member MUST incorporate any telemetry-relevant posture findings from the lead",
+        "- The lead MUST NOT introduce approvals on the member's behalf"
+      ],
+      "validation": "Report the tiered telemetry plan and confirm the member is paused at its approval gate with nothing applied."
+    },
+    {
+      "task_id": 4,
+      "task_name": "present_combined_plan",
+      "owner": "system-sentinel",
+      "constraints": [
+        "- The lead MUST present ONE combined plan: posture recommendations and telemetry tiers together",
+        "- The lead MUST mark every mutating action and name the member that would perform it",
+        "- The lead MUST wait for a single explicit operator decision before any mutation",
+        "- The lead MUST NOT infer approval from the posture assessment having completed"
+      ],
+      "validation": "Confirm the combined plan was presented and the team is waiting for one explicit operator decision."
+    },
+    {
+      "task_id": 5,
+      "task_name": "apply_approved_closures",
+      "owner": "privacy-champion",
+      "constraints": [
+        "- The member MUST apply ONLY the closures the operator approved",
+        "- The member MUST use its own gated tooling (dry-run default, explicit approval) and log every change",
+        "- The member MUST halt and report on the first closure failure rather than continuing silently",
+        "- The member MUST NOT apply posture recommendations (those are operator-owned)"
+      ],
+      "validation": "Report the closures applied, the failures (if any), and confirm the change log. Confirm no unapproved surface was touched."
+    },
+    {
+      "task_id": 6,
+      "task_name": "verify_and_synthesise",
+      "owner": "system-sentinel",
+      "constraints": [
+        "- The member MUST re-collect the posture inventory after any approved closures",
+        "- The member MUST confirm that every approved closure verified as expected",
+        "- The lead MUST synthesise the final hardening report against schemas/hardening-report.json",
+        "- The lead MUST preserve any dissent or unresolved risk rather than averaging it away",
+        "- ONLY the lead MAY declare the objective complete, and only after verification passes"
+      ],
+      "validation": "Deliver the hardening report with posture, applied changes, verification results, unresolved risks and clearly-marked operator-owned next steps."
+    }
+  ]
+}

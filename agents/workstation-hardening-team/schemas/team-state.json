@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Workstation hardening team — shared state",
+  "description": "The minimum shared state that crosses member boundaries. Members receive only the fields relevant to their task; full context is not inherited.",
+  "type": "object",
+  "required": ["objective", "target", "phase", "member_status"],
+  "additionalProperties": false,
+  "properties": {
+    "objective": { "type": "string" },
+    "target": { "type": "string" },
+    "phase": {
+      "type": "string",
+      "enum": ["intake", "posture", "telemetry", "approval", "apply", "verify", "done"]
+    },
+    "operator_approvals": {
+      "type": "array",
+      "description": "Explicit per-surface or per-tier approvals granted by the operator.",
+      "items": {
+        "type": "object",
+        "required": ["scope", "granted_at"],
+        "properties": {
+          "scope": { "type": "string" },
+          "granted_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "member_status": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["idle", "running", "succeeded", "failed", "skipped"]
+      }
+    },
+    "artefacts": {
+      "type": "object",
+      "description": "Handles to member outputs, not their full contents.",
+      "additionalProperties": { "type": "string" }
+    },
+    "unresolved_risks": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}
